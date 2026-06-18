@@ -731,6 +731,10 @@ impl System {
             }
         }
 
+        if let Some(eidecon) = devices.eidecon_mut() {
+            eidecon.update_irq_latch();
+        }
+
         Ok(true)
     }
 
