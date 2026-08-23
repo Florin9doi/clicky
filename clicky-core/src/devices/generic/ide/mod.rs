@@ -364,6 +364,7 @@ impl IdeDrive {
 
                 futures_executor::block_on(async {
                     // TODO: async this!
+                    // XXX: actually set error bits on failure
                     self.blockdev.read_exact(self.iobuf.as_raw()).await?;
 
                     self.iobuf.new_transfer();
@@ -413,6 +414,7 @@ impl IdeDrive {
 
             // TODO: async this!
             futures_executor::block_on(async {
+                // XXX: actually set error bits on failure
                 self.blockdev.write_all(self.iobuf.as_raw()).await?;
 
                 self.iobuf.new_transfer();
@@ -550,11 +552,13 @@ impl IdeDrive {
                 self.state = IdeDriveState::ReadAsyncLoad;
                 futures_executor::block_on(async {
                     // Seek into the blockdev
+                    // XXX: actually set error bits on failure
                     self.blockdev.seek(io::SeekFrom::Start(offset * 512)).await?;
 
                     // Read the first sector from the blockdev
                     // TODO: this should be done asynchronously, with a separate task/thread
                     // notifying the IDE device when the read is completed.
+                    // XXX: actually set error bits on failure
                     self.blockdev.read_exact(self.iobuf.as_raw()).await?;
 
                     self.remaining_sectors = if self.reg.sector_count == 0 {
@@ -636,6 +640,7 @@ impl IdeDrive {
                 self.state = IdeDriveState::WriteAsyncFlush;
                 futures_executor::block_on(async {
                     // Seek into the blockdev
+                    // XXX: actually set error bits on failure
                     self.blockdev.seek(io::SeekFrom::Start(offset * 512)).await?;
 
                     self.remaining_sectors = if self.reg.sector_count == 0 {
