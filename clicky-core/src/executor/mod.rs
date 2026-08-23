@@ -42,6 +42,7 @@ mod local {
     use futures::task::SpawnError;
 
     #[derive(Debug, Clone)]
+    #[allow(dead_code)]
     pub struct LocalSpawner(futures_executor::LocalSpawner);
 
     impl ClickySpawn for LocalSpawner {}
@@ -57,6 +58,7 @@ mod local {
     }
 
     #[derive(Debug)]
+    #[allow(dead_code)]
     pub struct LocalExecutor(futures_executor::LocalPool);
 
     impl ClickyExecutor for LocalExecutor {
