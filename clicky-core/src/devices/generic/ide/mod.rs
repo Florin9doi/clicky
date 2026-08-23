@@ -191,6 +191,7 @@ enum IdeDriveState {
 /// Transfer Mode set by the "Set Transfer Mode" (0x03) subcommand of the "Set
 /// Features" command.
 #[derive(Debug)]
+#[allow(dead_code)]
 enum IdeTransferMode {
     Pio,
     PioNoIORDY,
@@ -318,7 +319,7 @@ impl IdeDrive {
                 return None;
             }
 
-            ((cyl * NUM_HEADS as u64 + head) * NUM_SECTORS as u64 + sector) as u64
+            (cyl * NUM_HEADS as u64 + head) * NUM_SECTORS as u64 + sector
         };
 
         Some(offset)
@@ -363,10 +364,7 @@ impl IdeDrive {
 
                 futures_executor::block_on(async {
                     // TODO: async this!
-                    if let Err(e) = self.blockdev.read_exact(self.iobuf.as_raw()).await {
-                        // XXX: actually set error bits
-                        return Err(e);
-                    }
+                    self.blockdev.read_exact(self.iobuf.as_raw()).await?;
 
                     self.iobuf.new_transfer();
                     self.state = IdeDriveState::ReadReady;
@@ -379,7 +377,7 @@ impl IdeDrive {
                         self.assert_intrq();
                     }
 
-                    Ok(())
+                    Ok::<(), io::Error>(())
                 })?;
             }
         }
@@ -415,10 +413,7 @@ impl IdeDrive {
 
             // TODO: async this!
             futures_executor::block_on(async {
-                if let Err(e) = self.blockdev.write_all(self.iobuf.as_raw()).await {
-                    // XXX: actually set error bits
-                    return Err(e);
-                }
+                self.blockdev.write_all(self.iobuf.as_raw()).await?;
 
                 self.iobuf.new_transfer();
                 self.state = IdeDriveState::WriteReady;
@@ -443,7 +438,7 @@ impl IdeDrive {
                     self.dmarq.clear();
                 }
 
-                Ok(())
+                Ok::<(), io::Error>(())
             })?;
         }
 
@@ -555,18 +550,12 @@ impl IdeDrive {
                 self.state = IdeDriveState::ReadAsyncLoad;
                 futures_executor::block_on(async {
                     // Seek into the blockdev
-                    if let Err(e) = self.blockdev.seek(io::SeekFrom::Start(offset * 512)).await {
-                        // XXX: actually set error bits
-                        return Err(e);
-                    }
+                    self.blockdev.seek(io::SeekFrom::Start(offset * 512)).await?;
 
                     // Read the first sector from the blockdev
                     // TODO: this should be done asynchronously, with a separate task/thread
                     // notifying the IDE device when the read is completed.
-                    if let Err(e) = self.blockdev.read_exact(self.iobuf.as_raw()).await {
-                        // XXX: actually set error bits
-                        return Err(e);
-                    }
+                    self.blockdev.read_exact(self.iobuf.as_raw()).await?;
 
                     self.remaining_sectors = if self.reg.sector_count == 0 {
                         256
@@ -587,7 +576,7 @@ impl IdeDrive {
                         self.assert_intrq();
                     }
 
-                    Ok(())
+                    Ok::<(), io::Error>(())
                 })?;
 
                 Ok(())
@@ -647,10 +636,7 @@ impl IdeDrive {
                 self.state = IdeDriveState::WriteAsyncFlush;
                 futures_executor::block_on(async {
                     // Seek into the blockdev
-                    if let Err(e) = self.blockdev.seek(io::SeekFrom::Start(offset * 512)).await {
-                        // XXX: actually set error bits
-                        return Err(e);
-                    }
+                    self.blockdev.seek(io::SeekFrom::Start(offset * 512)).await?;
 
                     self.remaining_sectors = if self.reg.sector_count == 0 {
                         256
@@ -668,7 +654,7 @@ impl IdeDrive {
 
                     // TODO: fire interrupt?
 
-                    Ok(())
+                    Ok::<(), io::Error>(())
                 })?;
 
                 Ok(())

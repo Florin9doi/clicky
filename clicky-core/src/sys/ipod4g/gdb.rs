@@ -208,19 +208,19 @@ impl Target for Ipod4gGdb {
     type Arch = arch::arm::Armv4t;
     type Error = FatalMemException;
 
-    fn base_ops(&mut self) -> target::ext::base::BaseOps<Self::Arch, Self::Error> {
+    fn base_ops(&mut self) -> target::ext::base::BaseOps<'_, Self::Arch, Self::Error> {
         target::ext::base::BaseOps::MultiThread(self)
     }
 
-    fn sw_breakpoint(&mut self) -> Option<target::ext::breakpoints::SwBreakpointOps<Self>> {
+    fn sw_breakpoint(&mut self) -> Option<target::ext::breakpoints::SwBreakpointOps<'_, Self>> {
         Some(self)
     }
 
-    fn hw_watchpoint(&mut self) -> Option<target::ext::breakpoints::HwWatchpointOps<Self>> {
+    fn hw_watchpoint(&mut self) -> Option<target::ext::breakpoints::HwWatchpointOps<'_, Self>> {
         Some(self)
     }
 
-    fn monitor_cmd(&mut self) -> Option<target::ext::monitor_cmd::MonitorCmdOps<Self>> {
+    fn monitor_cmd(&mut self) -> Option<target::ext::monitor_cmd::MonitorCmdOps<'_, Self>> {
         Some(self)
     }
 }
@@ -253,7 +253,7 @@ impl MultiThreadOps for Ipod4gGdb {
                 let mut cycles: usize = 0;
                 loop {
                     // check for GDB interrupt every 1024 instructions
-                    if cycles % 1024 == 0 && check_gdb_interrupt() {
+                    if cycles.is_multiple_of(1024) && check_gdb_interrupt() {
                         return Ok(ThreadStopReason::GdbInterrupt);
                     }
                     cycles += 1;
