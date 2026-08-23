@@ -25,4 +25,4 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: clicky-desktop-windows
-          path: clicky.exe
+          path: target/release/clicky.exe
