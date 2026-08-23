@@ -14,9 +14,10 @@ jobs:
           - clicky-core
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v1
-      - run: rustup component add clippy
-      - uses: actions-rs/clippy-check@v1
+      - uses: actions/checkout@v4
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
         with:
-          token: ${{ secrets.GITHUB_TOKEN }}
-          args: --all-features --package ${{ matrix.crate }}
+          components: clippy
+      - name: Run clippy
+        run: cargo clippy --all-features --package ${{ matrix.crate }} -- -D warnings
