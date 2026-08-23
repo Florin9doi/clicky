@@ -157,7 +157,7 @@ impl Hd66753 {
             let ireg = *ireg.read().unwrap();
 
             // Hardcoded to 1Hz for now
-            let blink_on = (start.elapsed().as_millis() / 500) % 2 == 0;
+            let blink_on = (start.elapsed().as_millis() / 500).is_multiple_of(2);
 
             let height = match ireg.nl {
                 0b11111 => 132,
@@ -165,7 +165,7 @@ impl Hd66753 {
             };
 
             let cgram_window = cgram
-                    .chunks_exact(EMU_CGRAM_WIDTH * 2 / 8 / 2)
+                    .as_chunks::<{EMU_CGRAM_WIDTH * 2 / 8 / 2}>().0.iter()
                     .take(height)
                     .flat_map(|row| {
                         match ireg.sgs {

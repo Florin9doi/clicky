@@ -9,6 +9,7 @@ use super::HleBootloaderError;
 /// See http://www.ipodlinux.org/Firmware.html
 #[derive(Debug)]
 pub struct FirmwareMeta {
+    #[allow(dead_code)]
     pub header: VolumeHeader,
     pub images: Vec<ImageInfo>,
 }
@@ -47,6 +48,7 @@ impl FirmwareMeta {
 pub struct VolumeHeader {
     pub magic_hi: u32,
     pub dir_offset: u32,
+    #[allow(dead_code)]
     pub ext_header_loc: u16,
     pub format_version: u16,
 }
@@ -74,13 +76,17 @@ impl VolumeHeader {
 pub struct ImageInfo {
     pub dev: [u8; 4],
     pub name: [u8; 4],
+    #[allow(dead_code)]
     pub id: u32,
     pub dev_offset: u32,
     pub len: u32,
     pub addr: u32,
     pub entry_offset: u32,
+    #[allow(dead_code)]
     pub checksum: u32,
+    #[allow(dead_code)]
     pub vers: u32,
+    #[allow(dead_code)]
     pub load_addr: u32,
 }
 
