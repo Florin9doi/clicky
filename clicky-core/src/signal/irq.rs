@@ -51,7 +51,7 @@ pub struct Reciever {
     slave: Slave,
 }
 
-impl Reciever {
+impl Reciever { // recEIver
     /// Checks if the IRQ has been set.
     #[inline]
     pub fn asserted(&self) -> bool {

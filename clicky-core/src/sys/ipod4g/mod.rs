@@ -31,6 +31,8 @@ mod devices {
 
     pub use crate::devices::{
         display::hd66753::Hd66753,
+        display::hd66xxx::Hd66xxx,
+        display::hd66789::Hd66789,
         generic::{ide, AsanRam, Stub},
         platform::pp::*,
     };
@@ -42,6 +44,52 @@ const BOOT_HOLD_DURATION: Duration = Duration::from_millis(3000);
 enum BlockMode {
     Blocking,
     NonBlocking,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Model {
+    Ipod1g2g,
+    Ipod3g,
+    Ipod4gMono,
+    Ipod4gColor,
+    Ipod5gVideo,
+    IpodMini1g,
+    IpodMini2g,
+    IpodNano1g,
+}
+
+ #[derive(PartialEq)]
+pub enum DisplayType {
+    Mono,
+    Color1,
+    Color2,
+}
+
+#[derive(Debug, Clone, Copy)]
+pub struct DisplaySize {
+    pub width: usize,
+    pub height: usize,
+}
+
+impl Model {
+    pub fn display_type(self) -> DisplayType {
+        match self {
+            Model::Ipod1g2g | Model::Ipod3g | Model::Ipod4gMono => DisplayType::Mono,
+            Model::Ipod4gColor                                  => DisplayType::Color1,
+            Model::Ipod5gVideo                                  => DisplayType::Color2,
+            Model::IpodMini1g | Model::IpodMini2g               => DisplayType::Mono,
+            Model::IpodNano1g                                   => DisplayType::Color2,
+        }
+    }
+    pub fn display_size(self) -> DisplaySize {
+        match self {
+            Model::Ipod1g2g | Model::Ipod3g | Model::Ipod4gMono => DisplaySize { width: 160, height: 128 },
+            Model::Ipod4gColor                                  => DisplaySize { width: 220, height: 176 },
+            Model::Ipod5gVideo                                  => DisplaySize { width: 320, height: 240 },
+            Model::IpodMini1g | Model::IpodMini2g               => DisplaySize { width: 138, height: 110 },
+            Model::IpodNano1g                                   => DisplaySize { width: 176, height: 132 },
+        }
+    }
 }
 
 pub enum BootKind<F: Read + Seek> {
@@ -58,6 +106,7 @@ struct Ipod4gControls {
 /// A Ipod4g system
 #[derive(Debug)]
 pub struct Ipod4g {
+    pub model: Model,
     frozen: bool,         // set after a fatal error to enable post-mortem debugging
     skip_irq_check: bool, // set by the GDB stub when single-stepping though code
 
@@ -101,6 +150,7 @@ impl Ipod4g {
         hdd: Box<dyn BlockDev>,
         flash_rom: Option<Box<[u8]>>,
         boot_kind: BootKind<F>,
+        model: Model,
     ) -> Result<Ipod4g, Ipod4gBuildError>
     where
         F: Read + Seek,
@@ -112,18 +162,26 @@ impl Ipod4g {
         let dma_pending = irq::Pending::new();
         let gpio_changed = gpio::Changed::new();
         let i2c_changed = signal::Trigger::new(signal::TriggerKind::Edge);
+        let lcd1 = Self::make_lcd(model);
+        let lcd2 = Self::make_lcd(model);
 
         // hook-up external controls
         let (mut hold_tx, hold_rx) = gpio::new(gpio_changed.clone(), "Hold");
         let (controls_tx, controls_rx) = devices::Controls::new_tx_rx(i2c_changed.clone());
 
         let mut sys = Ipod4g {
+            model: model,
             frozen: false,
             skip_irq_check: false,
 
             cpu: Cpu::new(),
             cop: Cpu::new(),
-            devices: Ipod4gBus::new(executor.spawner(), irq_pending.clone(), dma_pending.clone()),
+            devices: Ipod4gBus::new(
+                executor.spawner(),
+                irq_pending.clone(),
+                dma_pending.clone(),
+                lcd1, lcd2
+            ),
             controls: None,
             synthetic_controls: controls_tx.clone(),
             boot_hold: None,
@@ -189,6 +247,15 @@ impl Ipod4g {
         let keys = keys.into_iter().collect::<Vec<_>>();
         if !keys.is_empty() {
             self.boot_hold = Some(keys);
+        }
+    }
+
+    fn make_lcd(model: Model) -> devices::LcdBridge {
+        use devices::{Hd66753, Hd66xxx, Hd66789};
+        match model.display_type() {
+            DisplayType::Mono => devices::LcdBridge::new_mono(Box::new(Hd66753::new())),
+            DisplayType::Color1 => devices::LcdBridge::new_color(Box::new(Hd66xxx::new())),
+            DisplayType::Color2 => devices::LcdBridge::new_color(Box::new(Hd66789::new())),
         }
     }
 
@@ -399,7 +466,11 @@ impl Ipod4g {
 
     /// Return the system's RenderCallback method.
     pub fn render_callback(&self) -> RenderCallback {
-        self.devices.mlcd.render_callback()
+        if self.model.display_type() == DisplayType::Mono {
+            self.devices.lcd1.render_callback()
+        } else {
+            self.devices.lcd2.render_callback()
+        }
     }
 }
 
@@ -415,7 +486,8 @@ pub struct Ipod4gBus {
     pub cpuid: devices::CpuIdReg,
     pub flash: devices::Flash,
     pub cpucon: devices::CpuCon,
-    pub mlcd: devices::MonoLcdBridge,
+    pub lcd1: devices::LcdBridge,
+    pub lcd2: devices::LcdBridge,
     pub timer1: devices::CfgTimer,
     pub timer2: devices::CfgTimer,
     pub usec_timer: devices::UsecTimer,
@@ -459,6 +531,8 @@ impl Ipod4gBus {
         task_spawner: Spawner,
         irq_pending: irq::Pending,
         dma_pending: irq::Pending,
+        lcd1: devices::LcdBridge,
+        lcd2: devices::LcdBridge,
     ) -> Ipod4gBus {
         let (ide_irq_tx, ide_irq_rx) = irq::new(irq_pending.clone(), "IDE");
         let (timer1_irq_tx, timer1_irq_rx) = irq::new(irq_pending.clone(), "Timer1");
@@ -515,7 +589,8 @@ impl Ipod4gBus {
             usb: Usb::new(),
             flash: Flash::new(),
             cpucon: CpuCon::new(task_spawner.clone()),
-            mlcd: MonoLcdBridge::new(Box::new(Hd66753::new())),
+            lcd1,
+            lcd2,
             timer1: CfgTimer::new("1", timer1_irq_tx, task_spawner.clone()),
             timer2: CfgTimer::new("2", timer2_irq_tx, task_spawner),
             usec_timer: UsecTimer::new(),
@@ -691,9 +766,10 @@ mmap! {
         0x6400_4000..=0x6400_41ff => intcon, // i guess there's a mirror?
 
         0x7000_0000..=0x7000_1fff => ppcon,
-        0x7000_3000..=0x7000_301f => mlcd,
+        0x7000_3000..=0x7000_301f => lcd1,
         0x7000_6000..=0x7000_603f => serial0,
         0x7000_6040..=0x7000_607f => serial1,
+        0x7000_8a00..=0x7000_8b0f => lcd2,
         0x7000_a000..=0x7000_a03f => pwmcon,
         0x7000_c000..=0x7000_c0ff => i2ccon,
         0x7000_c100..=0x7000_c1ff => opto,
