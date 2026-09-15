@@ -115,7 +115,7 @@ void config_init(void)
     mlc_memset (&config, 0, sizeof (config));
     mlc_memset (&configimgs, 0, sizeof (configimgs));
     config.image = configimgs;
-    config.timeout   = 15;
+    config.timeout   = 2;
     config.def       = 1; // default item index in menu, 1-based
     config.backlight = 1;
     config.usegradient = 1;
