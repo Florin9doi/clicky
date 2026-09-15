@@ -81,15 +81,26 @@ impl Memory for MonoLcdBridge {
             return Err(StubWrite(Error, ()));
         }
 
+        // warn!(target: "LCD", "wr offset:{:x} val:{:x}", offset, val);
+
         // the iPod uses the controller via an 8-bit interface
         let val = val as u8; // FIXME: this should use trunc_to_u8, but it crashes...
         let val = match self.write_byte_latch.take() {
             None => {
                 self.write_byte_latch = Some(val);
+                // warn!(target: "LCD", "  wr offset:{:x} 2:{:x}", offset, val);
                 return Ok(());
             }
             Some(hi) => (hi as u16) << 8 | (val as u16),
         };
+
+        // warn!(target: "LCD", "    wr offset:{:x} 3:{:x}", offset, val);
+        // mini2g pp5022 quirk (?)
+        if offset == 0x08 && val > 0xff {
+            let _ = self.panel.write_command(val >> 8);
+            let _ = self.panel.write_data(val & 0xff);
+            return Ok(());
+        }
 
         match offset {
             0x8 => self.panel.write_command(val),

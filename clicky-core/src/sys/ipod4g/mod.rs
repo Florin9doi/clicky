@@ -156,6 +156,12 @@ impl Ipod4g {
         {
             let mut gpio_abcd = sys.devices.gpio_abcd.lock().unwrap();
             gpio_abcd.register_in(5, hold_rx.clone());
+
+            // failed:
+            // let hwid_changed = gpio::Changed::new();
+            // let (mut hwid_tx, hwid_rx) = gpio::new(hwid_changed, "HWID");
+            // gpio_abcd.register_in(4, hwid_rx.clone());
+            // hwid_tx.set_high();
         }
 
         {
@@ -720,6 +726,7 @@ mmap! {
         // Undocumented everywhere. Arbiter priority matrix of Multi Path Mem
         // Controller?
         0x6000_3000..=0x6000_30ff => total_mystery,
+        0x7000_2c00 => total_mystery,
         // Diagnostics program reads from address, and write back 0x10000000
         0x7000_3800 => total_mystery,
         0xc031_b1d8 => mystery_flash_stub,

@@ -306,6 +306,7 @@ impl Memory for I2CCon {
                 self.txn.addr_op = Some(I2COp::from_bit(val.get_bit(0)));
                 self.txn.addr = Some(val.get_bits(1..=7));
             }),
+            0x08 => Err(StubWrite(Info, ())),
             0x0c => Ok(self.data[0] = val),
             0x10 => Ok(self.data[1] = val),
             0x14 => Ok(self.data[2] = val),

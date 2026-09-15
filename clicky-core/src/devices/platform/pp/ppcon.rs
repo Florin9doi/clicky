@@ -75,12 +75,12 @@ impl Memory for PPCon {
             // HACK: flag needs to be set to progress through USB init in rockbox
             0x28 => Err(StubRead(Info, self.dev_init[6] | 0x80)),
             0x2c => Err(StubRead(Info, self.dev_init[7])),
-            0x30 => Err(StubRead(Info, self.dev_timing[0])),
+            0x30 => Err(StubRead(Info, self.dev_timing[0] | 0x8000000)),
             0x34 => Err(StubRead(Debug, self.dev_timing[1])),
             0x3c => Err(StubRead(Info, self.dev_timing[2])),
             0x80 => Ok(self.gpo_val),
             0x84 => Ok(self.gpo_enable),
-            0x88 => Err(StubRead(Info, 0x00)),
+            0x88 => Ok(0x00),
             0x8c => Ok(self.gpo_input_enable),
             _ => Err(Unexpected),
         }
@@ -106,9 +106,10 @@ impl Memory for PPCon {
             0x34 => Err(StubWrite(Debug, self.dev_timing[1] = val)),
             // HACK: flag needs to be set to progress through the Flash ROM bootloader
             0x3c => Err(StubWrite(Info, self.dev_timing[2] = val | 0x80000000)),
+            0x40 => Err(StubWrite(Info, ())),
             0x80 => Ok(self.gpo_val = val),
             0x84 => Ok(self.gpo_enable = val),
-            0x88 => Err(InvalidAccess),
+            0x88 => Err(StubWrite(Info, ())),
             0x8c => Ok(self.gpo_input_enable = val),
             _ => Err(Unexpected),
         }
