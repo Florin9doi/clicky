@@ -33,6 +33,7 @@ mod devices {
         display::hd66753::Hd66753,
         display::hd66xxx::Hd66xxx,
         display::hd66789::Hd66789,
+        display::bcm::Bcm2722,
         generic::{ide, AsanRam, Stub},
         platform::pp::*,
     };
@@ -521,6 +522,7 @@ pub struct Ipod4gBus {
     pub mystery_flash_stub: devices::Stub,
     pub total_mystery: devices::Stub,
     pub pwmcon: devices::PWMCon,
+    pub bcm_video: devices::Bcm2722,
 
     pub pp5002_serial_stub: devices::Stub,
 }
@@ -622,6 +624,7 @@ impl Ipod4gBus {
             mystery_flash_stub: Stub::new("Mystery FlashROM Con?"),
             total_mystery: Stub::new("(?) Arbiter Priority"),
             pwmcon: PWMCon::new(),
+            bcm_video: Bcm2722::new(),
 
             pp5002_serial_stub: Stub::new("PP5002 serial stub"),
         }
@@ -738,11 +741,14 @@ macro_rules! mmap {
 mmap! {
     RAM {
         0x1000_0000..=0x11ff_ffff => sdram,
+        0x1200_0000..=0x12ff_ffff => sdram,
         0x4000_0000..=0x4001_7fff => fastram,
     }
 
     DEVICES {
         0x0000_0000..=0x000f_ffff => flash,
+        0x3000_0000..=0x3007_ffff => bcm_video,
+
         0x6000_0000..=0x6000_0fff => cpuid,
         0x6000_1000..=0x6000_102f => mailbox,
         0x6000_4000..=0x6000_41ff => intcon,

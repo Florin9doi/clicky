@@ -7,6 +7,7 @@ use crate::gui::RenderCallback;
 pub mod hd66753;
 pub mod hd66xxx;
 pub mod hd66789;
+pub mod bcm;
 
 /// LCD Controller IC trait (eg. HD66753)
 pub trait LcdPanel: std::fmt::Debug + Send + Sync {
