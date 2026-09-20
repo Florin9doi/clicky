@@ -1,0 +1,28 @@
+name: Windows Build
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+    branches: [master]
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Build clicky-desktop
+        run: cargo build --release -p clicky-desktop
+
+      - name: Rename binary
+        run: Rename-Item target/release/clicky-desktop.exe clicky.exe
+
+      - name: Upload Windows binary
+        uses: actions/upload-artifact@v7
+        with:
+          name: clicky-windows
+          path: target/release/clicky.exe
