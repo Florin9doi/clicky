@@ -68,6 +68,7 @@ pub struct Model {
     pub mirrored: bool,
     pub width: usize,
     pub height: usize,
+    pub fastram: usize,
 }
 
 impl Model {
@@ -78,6 +79,7 @@ impl Model {
             mirrored: false,
             width: 160,
             height: 128,
+            fastram: 96 * 1024,
         },
         Self {
             name: "3g",
@@ -85,6 +87,7 @@ impl Model {
             mirrored: false,
             width: 160,
             height: 128,
+            fastram: 96 * 1024,
         },
         Self {
             name: "4gmono",
@@ -92,6 +95,7 @@ impl Model {
             mirrored: false,
             width: 160,
             height: 128,
+            fastram: 96 * 1024,
         },
         Self {
             name: "4gcolor",
@@ -99,6 +103,7 @@ impl Model {
             mirrored: false,
             width: 220,
             height: 176,
+            fastram: 96 * 1024,
         },
         Self {
             name: "5gvideo",
@@ -106,6 +111,7 @@ impl Model {
             mirrored: false,
             width: 320,
             height: 240,
+            fastram: 96 * 1024,
         },
         Self {
             name: "mini1g",
@@ -113,6 +119,7 @@ impl Model {
             mirrored: true,
             width: 138,
             height: 110,
+            fastram: 96 * 1024,
         },
         Self {
             name: "mini2g",
@@ -120,6 +127,7 @@ impl Model {
             mirrored: true,
             width: 138,
             height: 110,
+            fastram: 128 * 1024,
         },
         Self {
             name: "nano1g",
@@ -127,6 +135,7 @@ impl Model {
             mirrored: false,
             width: 176,
             height: 132,
+            fastram: 96 * 1024,
         },
     ];
 
@@ -136,6 +145,10 @@ impl Model {
             .find(|model| model.name == s)
             .copied()
             .unwrap_or(Self::ALL[2]) // 4gmono
+    }
+
+    pub fn fastram_size(self) -> usize {
+        self.fastram
     }
 
     pub fn display_type(self) -> DisplayType {
@@ -634,7 +647,7 @@ impl Ipod4gBus {
         use devices::*;
         Ipod4gBus {
             sdram: AsanRam::new(32 * 1024 * 1024, true), // 32 MB
-            fastram: AsanRam::new(96 * 1024, true),      // 96 KB
+            fastram: AsanRam::new(model.fastram_size(), true),
             cpuid: CpuIdReg::new(),
             firewire: Firewire::new(),
             usb: Usb::new(),
@@ -790,7 +803,8 @@ macro_rules! mmap {
 mmap! {
     RAM {
         0x1000_0000..=0x11ff_ffff => sdram,
-        0x4000_0000..=0x4001_7fff => fastram,
+        // 0x4000_0000..=0x4001_7fff => fastram, // PP5020
+        0x4000_0000..=0x4001_ffff => fastram, // PP5022
     }
 
     DEVICES {
