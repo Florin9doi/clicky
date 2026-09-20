@@ -803,6 +803,7 @@ macro_rules! mmap {
 mmap! {
     RAM {
         0x1000_0000..=0x11ff_ffff => sdram,
+        0x1200_0000..=0x12ff_ffff => sdram, // mirror
         // 0x4000_0000..=0x4001_7fff => fastram, // PP5020
         0x4000_0000..=0x4001_ffff => fastram, // PP5022
     }
@@ -869,6 +870,8 @@ mmap! {
         // Undocumented everywhere. Arbiter priority matrix of Multi Path Mem
         // Controller?
         0x6000_3000..=0x6000_30ff => total_mystery,
+        0x7000_2c00 => total_mystery,
+        0x7000_c300..=0x7000_c3ff => total_mystery, // triggered by 5g with nor but no hdd
         // Diagnostics program reads from address, and write back 0x10000000
         0x7000_3800 => total_mystery,
         0xc031_b1d8 => mystery_flash_stub,

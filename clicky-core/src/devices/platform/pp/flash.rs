@@ -53,6 +53,7 @@ impl Flash {
             // hardware revision magic number
             // see: https://www.rockbox.org/wiki/IpodHardwareInfo
             0x2084 => Ok(0x0005_0014), // iPod 4th Gen
+            0x405c => Ok(0x000B_0005), // iPod 5th Gen
             _ => Err(Unimplemented),
         }
     }

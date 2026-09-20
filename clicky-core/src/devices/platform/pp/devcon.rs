@@ -86,7 +86,8 @@ impl Memory for DevCon {
             0x2c => Err(StubRead(Error, 0)),
             0x34 => Ok(self.pll_control),
             0x38 => Err(StubRead(Error, 0)),
-            0x3c => Ok(self.pll_status),
+            0x3c => Ok(self.pll_status
+                | 0x8000_0000), // pp5022
             0x44 => Err(StubRead(Error, self.cache_priority as u32)),
             0xa0 => Err(StubRead(Trace, 0)),
             0xa4 => Err(StubRead(Error, self.mystery_i2c)),
