@@ -14,8 +14,94 @@ pub struct MinifbControls {
 pub struct MinifbRenderer {}
 
 impl MinifbRenderer {
+    /// Render one logical pixel as a physical dot.
+    fn render_lcd_pixel(
+        scale: usize,
+        buffer: &mut [u32],
+        buffer_width: usize,
+        x: usize,
+        y: usize,
+        pixel: u32,
+    ) {
+        let base_x = x * scale;
+        let base_y = y * scale;
+
+        let r = ((pixel >> 16) & 0xff) as f32;
+        let g = ((pixel >> 8) & 0xff) as f32;
+        let b = (pixel & 0xff) as f32;
+
+        for py in 0..scale {
+            for px in 0..scale {
+                #[allow(dead_code)]
+                enum Effect {
+                    None,
+                    TopRight,
+                    AllSides,
+                }
+                const SELECTED_MODE: Effect = Effect::TopRight;
+                let edge = match SELECTED_MODE {
+                    Effect::None => false,
+                    Effect::TopRight => py == 0 || px == scale - 1,
+                    Effect::AllSides => px == 0 || py == 0 || px == scale - 1 || py == scale - 1,
+                };
+
+                let factor = if edge {
+                    0.8
+                } else {
+                    1.0
+                };
+
+                let r = (r * factor).min(255.0) as u32;
+                let g = (g * factor).min(255.0) as u32;
+                let b = (b * factor).min(255.0) as u32;
+
+                let dst_x = base_x + px;
+                let dst_y = base_y + py;
+
+                let index = dst_y * buffer_width + dst_x;
+
+                if index < buffer.len() {
+                    buffer[index] = (r << 16) | (g << 8) | b;
+                }
+            }
+        }
+    }
+
     /// (width, height) crops the framebuffer to the specified screen size
     /// (starting from the top-left corner)
+    fn render_lcd(
+        output: &mut [u32],
+        scale: usize,
+        output_width: usize,
+        source: &[u32],
+        src_width: usize,
+        src_height: usize,
+        logical_width: usize,
+        logical_height: usize,
+    ) {
+        let width = src_width.min(logical_width);
+        let height = src_height.min(logical_height);
+
+        for y in 0..height {
+            for x in 0..width {
+                let src_index = y * src_width + x;
+
+                if src_index >= source.len() {
+                    continue;
+                }
+
+                Self::render_lcd_pixel(
+                    scale,
+                    output,
+                    output_width,
+                    x,
+                    y,
+                    source[src_index],
+                );
+            }
+        }
+    }
+
     pub fn run(
         title: &'static str,
         (width, height): (usize, usize),
@@ -25,15 +111,18 @@ impl MinifbRenderer {
     ) {
         let mut controls = controls.into();
 
-        let mut buffer: Vec<u32> = vec![0; width * height];
+        let scale = if width > 300 { 2 } else { 4 };
+        let scaled_width = width * scale;
+        let scaled_height = height * scale;
+        let mut buffer = vec![0; scaled_width * scaled_height];
         let mut emu_buffer = Vec::new();
 
         let mut window = Window::new(
             title,
-            width,
-            height,
+            scaled_width,
+            scaled_height,
             WindowOptions {
-                scale: if width >= 320 { minifb::Scale::X2 } else { minifb::Scale::X4 },
+                scale: minifb::Scale::X1,
                 resize: true,
                 ..WindowOptions::default()
             },
@@ -65,18 +154,21 @@ impl MinifbRenderer {
             }
 
             // update the framebuffer
-            let (w, _h) = update_fb(&mut emu_buffer);
+            let (w, h) = update_fb(&mut emu_buffer);
 
-            // crop the emulated buffer
-            let new_buf = emu_buffer
-                .chunks_exact(w)
-                .take(height)
-                .flat_map(|row| row.iter().take(width))
-                .copied();
-            buffer.splice(.., new_buf);
+            Self::render_lcd(
+                &mut buffer,
+                scale,
+                scaled_width,
+                &emu_buffer,
+                w,
+                h,
+                width,
+                height,
+            );
 
             window
-                .update_with_buffer(&buffer, width, height)
+                .update_with_buffer(&buffer, scaled_width, scaled_height)
                 .expect("could not update minifb window");
         }
     }
