@@ -64,6 +64,7 @@ pub struct DisplaySize {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Model {
     pub name: &'static str,
+    pub alias: &'static str,
     pub display_type: DisplayType,
     pub mirrored: bool,
     pub width: usize,
@@ -74,7 +75,8 @@ pub struct Model {
 impl Model {
     pub const ALL: &[Self] = &[
         Self {
-            name: "1g",
+            name: "iPod (1st gen)",
+            alias: "1g",
             display_type: DisplayType::Mono,
             mirrored: false,
             width: 160,
@@ -82,7 +84,8 @@ impl Model {
             fastram: 96 * 1024,
         },
         Self {
-            name: "3g",
+            name: "iPod (3rd gen)",
+            alias: "3g",
             display_type: DisplayType::Mono,
             mirrored: false,
             width: 160,
@@ -90,7 +93,8 @@ impl Model {
             fastram: 96 * 1024,
         },
         Self {
-            name: "4gmono",
+            name: "iPod (4th gen)",
+            alias: "4gmono",
             display_type: DisplayType::Mono,
             mirrored: false,
             width: 160,
@@ -98,7 +102,8 @@ impl Model {
             fastram: 96 * 1024,
         },
         Self {
-            name: "4gcolor",
+            name: "iPod Color",
+            alias: "4gcolor",
             display_type: DisplayType::Color,
             mirrored: false,
             width: 220,
@@ -106,7 +111,8 @@ impl Model {
             fastram: 96 * 1024,
         },
         Self {
-            name: "5gvideo",
+            name: "iPod Video",
+            alias: "5gvideo",
             display_type: DisplayType::Bcm2722,
             mirrored: false,
             width: 320,
@@ -114,7 +120,8 @@ impl Model {
             fastram: 96 * 1024,
         },
         Self {
-            name: "mini1g",
+            name: "iPod Mini (1st gen)",
+            alias: "mini1g",
             display_type: DisplayType::Mono,
             mirrored: true,
             width: 138,
@@ -122,7 +129,8 @@ impl Model {
             fastram: 96 * 1024,
         },
         Self {
-            name: "mini2g",
+            name: "iPod Mini (2nd gen)",
+            alias: "mini2g",
             display_type: DisplayType::Mono,
             mirrored: true,
             width: 138,
@@ -130,7 +138,8 @@ impl Model {
             fastram: 128 * 1024,
         },
         Self {
-            name: "nano1g",
+            name: "iPod Nano",
+            alias: "nano1g",
             display_type: DisplayType::Hd66789,
             mirrored: false,
             width: 176,
@@ -142,7 +151,7 @@ impl Model {
     pub fn from_str(s: &str) -> Self {
         Self::ALL
             .iter()
-            .find(|model| model.name == s)
+            .find(|model| model.alias == s)
             .copied()
             .unwrap_or(Self::ALL[2]) // 4gmono
     }

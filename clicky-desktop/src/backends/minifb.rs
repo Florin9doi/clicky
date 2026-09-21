@@ -103,7 +103,7 @@ impl MinifbRenderer {
     }
 
     pub fn run(
-        title: &'static str,
+        title: &str,
         (width, height): (usize, usize),
         mut update_fb: RenderCallback,
         controls: impl Into<MinifbControls>,

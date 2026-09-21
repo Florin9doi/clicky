@@ -151,8 +151,6 @@ fn main() -> DynResult<()> {
     };
 
     let mut system = Ipod4g::new(hdd, flash_rom, boot_kind, model)?;
-    let display_width = system.model.display_size().width;
-    let display_height = system.model.display_size().height;
 
     system.set_hold_keys(args.hold_keys);
 
@@ -246,8 +244,8 @@ fn main() -> DynResult<()> {
         if #[cfg(feature = "minifb")] {
             use crate::backends::minifb::MinifbRenderer;
             MinifbRenderer::run(
-                "iPod 4g",
-                (display_width, display_height),
+                &("clicky - ".to_owned() + model.name),
+                (model.display_size().width, model.display_size().height),
                 update_fb,
                 controls,
                 kill_ui_rx,
