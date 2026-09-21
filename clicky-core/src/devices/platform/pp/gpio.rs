@@ -142,7 +142,16 @@ impl Memory for GpioPort {
             0x00 => Ok(self.enable as u32),
             0x10 => Ok(self.output_enable as u32),
             0x20 => Ok(self.output_val as u32),
-            0x30 => Ok(self.input_val as u32),
+            0x30 => Ok(self.input_val as u32 | 0x10),
+            // ipod photo
+            // hwid = 0x60000, gpio ignored -> photo (early) display
+            // ipod color
+            // hwid = 0x60014, check gpio:
+                                    // 0x00 -> photo (early) display
+                                    // 0x02 -> photo (early) display
+                                    // 0x10 -> hd.89
+                                    // 0x12 -> 4rd display? hd.89-like
+            // ipod nano -> hd.89
             0x40 => Ok(self.interrupt_status as u32),
             0x50 => Ok(self.interrupt_enable as u32),
             0x60 => Ok(self.interrupt_level as u32),

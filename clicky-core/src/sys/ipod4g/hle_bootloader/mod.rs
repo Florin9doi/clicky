@@ -88,7 +88,7 @@ pub(super) fn run_hle_bootloader(
         .gpio_abcd
         .lock()
         .unwrap()
-        .w32(0x00, 0x20)
+        .w32(0x00, 0x32) // 0x12 -> display detection
         .unwrap();
 
     Ok(())

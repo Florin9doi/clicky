@@ -110,7 +110,7 @@ impl Hd66789 {
         let mut ireg = self.ireg.write().unwrap();
         match ireg.cmd {
             0x22 => {}
-            _ => {trace!(target: "LCD", "write_data cmd:{:x} val:0x{:x}({})", ireg.cmd, val, val);}
+            _ => {debug!(target: "LCD", "write_data cmd:{:x} val:0x{:x}({})", ireg.cmd, val, val);}
         }
         match ireg.cmd {
             // Display Control
