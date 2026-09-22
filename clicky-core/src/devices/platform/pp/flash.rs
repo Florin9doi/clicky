@@ -8,6 +8,7 @@ enum CFIState {
     CommandPreambleAA,
     CommandPreamble55,
     ReadSoftwareID,
+    ReadStatus,
 }
 
 /// Internal iPod Flash ROM. Defaults to HLE mode (where only a few critical
@@ -32,6 +33,16 @@ impl Flash {
             dump: None,
             state: CFIState::ReadArrayMode,
         }
+    }
+
+    pub fn new_with_dump(dump: Box<[u8]>) -> Result<Flash, &'static str> {
+        if dump.len() != 0x100000 {
+            return Err("Flash ROM dump must be exactly 1MB");
+        }
+        Ok(Flash {
+            dump: Some(dump),
+            state: CFIState::ReadArrayMode,
+        })
     }
 
     pub fn use_dump(&mut self, dump: Box<[u8]>) -> Result<(), &'static str> {
@@ -111,8 +122,14 @@ impl Memory for Flash {
                 }
                 
             }
-            (CFIState::ReadSoftwareID, 0x0) => Ok(0x00BF), // Manufacturer ID (SST)
-            (CFIState::ReadSoftwareID, 0x1) => Ok(0x273F), // Device ID (SST39WF800A)
+            // 4G / Color / 5G
+            // (CFIState::ReadSoftwareID, 0x0) => Ok(0x00BF), // Manufacturer ID (SST)
+            // (CFIState::ReadSoftwareID, 0x1) => Ok(0x273F), // Device ID (SST39WF800A)
+
+            // 1G
+            (CFIState::ReadSoftwareID, 0x0) => Ok(0x00B0), // Manufacturer ID (Sharp)
+            (CFIState::ReadSoftwareID, 0x1) => Ok(0x0060), // Device ID ()
+            (CFIState::ReadStatus, _) => Ok(0x80),
             _ => Err(Unimplemented),
         }        
     }
@@ -159,6 +176,18 @@ impl Memory for Flash {
                 Ok(())
             }
             (0x0000, 0xF0, CFIState::ReadSoftwareID) => {
+                self.state = CFIState::ReadArrayMode;
+                Ok(())
+            }
+            (_, 0x90, _) => { // read id
+                self.state = CFIState::ReadSoftwareID;
+                Ok(())
+            }
+            (_, 0x70, _) => { // read status
+                self.state = CFIState::ReadStatus;
+                Ok(())
+            }
+            (_, 0xff, _) => { // reset
                 self.state = CFIState::ReadArrayMode;
                 Ok(())
             }

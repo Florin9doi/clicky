@@ -1,21 +1,23 @@
 use std::io::{Read, Seek};
 use std::time::Duration;
+use std::collections::HashMap;
 
 use armv4t_emu::{reg, Cpu};
 use relativity::Timeout;
 use thiserror::Error;
 
 use crate::block::BlockDev;
-use crate::devices::{Device, Probe, display::LcdPanel};
+use crate::devices::{display::LcdPanel, Device, Probe};
 use crate::error::*;
 use crate::executor::*;
 use crate::gui::RenderCallback;
-use crate::memory::{armv4t_adaptor::MemoryAdapter, MemAccess, MemAccessKind, Memory};
+use crate::memory::{armv4t_adaptor::MemoryAdapter, MemAccess, Memory};
 use crate::signal::{self, gpio, irq};
 
 mod controls;
 mod gdb;
 mod hle_bootloader;
+mod pp;
 
 pub use controls::{Ipod4gBinds, Ipod4gKey};
 pub use gdb::Ipod4gGdb;
@@ -62,14 +64,78 @@ pub struct DisplaySize {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SoC {
+    Pp5002,
+    Pp5020,
+    Pp5022,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum GpioBlockId {
+    Abcd,
+    Efgh,
+    Ijkl,
+}
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum KeySticky {
+    False,
+    True,
+}
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum KeyActive {
+    High,
+    Low,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum KeyRoute {
+    ClickWheel,
+    Gpio(GpioBlockId, u8, KeySticky, KeyActive),
+}
+
+const IPOD_1G_KEYMAP: &[(Ipod4gKey, KeyRoute)] = &[
+    (Ipod4gKey::Right,  KeyRoute::Gpio(GpioBlockId::Abcd, 0, KeySticky::False, KeyActive::Low)),
+    (Ipod4gKey::Action, KeyRoute::Gpio(GpioBlockId::Abcd, 1, KeySticky::False, KeyActive::Low)),
+    (Ipod4gKey::Down,   KeyRoute::Gpio(GpioBlockId::Abcd, 2, KeySticky::False, KeyActive::Low)),
+    (Ipod4gKey::Left,   KeyRoute::Gpio(GpioBlockId::Abcd, 3, KeySticky::False, KeyActive::Low)),
+    (Ipod4gKey::Up,     KeyRoute::Gpio(GpioBlockId::Abcd, 4, KeySticky::False, KeyActive::Low)),
+    (Ipod4gKey::Hold,   KeyRoute::Gpio(GpioBlockId::Abcd, 5, KeySticky::True,  KeyActive::High)),
+];
+const IPOD_3G_KEYMAP: &[(Ipod4gKey, KeyRoute)] = &[
+    (Ipod4gKey::Right,  KeyRoute::Gpio(GpioBlockId::Abcd, 0, KeySticky::False, KeyActive::Low)),
+    (Ipod4gKey::Action, KeyRoute::Gpio(GpioBlockId::Abcd, 1, KeySticky::False, KeyActive::Low)),
+    (Ipod4gKey::Down,   KeyRoute::Gpio(GpioBlockId::Abcd, 2, KeySticky::False, KeyActive::Low)),
+    (Ipod4gKey::Left,   KeyRoute::Gpio(GpioBlockId::Abcd, 3, KeySticky::False, KeyActive::Low)),
+    (Ipod4gKey::Up,     KeyRoute::Gpio(GpioBlockId::Abcd, 4, KeySticky::False, KeyActive::Low)),
+    (Ipod4gKey::Hold,   KeyRoute::Gpio(GpioBlockId::Abcd, 5, KeySticky::True,  KeyActive::Low)),
+];
+const IPOD_MINI1G_KEYMAP: &[(Ipod4gKey, KeyRoute)] = &[
+    (Ipod4gKey::Action, KeyRoute::Gpio(GpioBlockId::Abcd, 0, KeySticky::False, KeyActive::Low)),
+    (Ipod4gKey::Up,     KeyRoute::Gpio(GpioBlockId::Abcd, 1, KeySticky::False, KeyActive::Low)),
+    (Ipod4gKey::Down,   KeyRoute::Gpio(GpioBlockId::Abcd, 2, KeySticky::False, KeyActive::Low)),
+    (Ipod4gKey::Right,  KeyRoute::Gpio(GpioBlockId::Abcd, 3, KeySticky::False, KeyActive::Low)),
+    (Ipod4gKey::Left,   KeyRoute::Gpio(GpioBlockId::Abcd, 4, KeySticky::False, KeyActive::Low)),
+    (Ipod4gKey::Hold,   KeyRoute::Gpio(GpioBlockId::Abcd, 5, KeySticky::True,  KeyActive::Low)),
+];
+const CLICKWHEEL_KEYMAP: &[(Ipod4gKey, KeyRoute)] = &[
+    (Ipod4gKey::Action, KeyRoute::ClickWheel),
+    (Ipod4gKey::Up,     KeyRoute::ClickWheel),
+    (Ipod4gKey::Down,   KeyRoute::ClickWheel),
+    (Ipod4gKey::Left,   KeyRoute::ClickWheel),
+    (Ipod4gKey::Right,  KeyRoute::ClickWheel),
+    (Ipod4gKey::Hold,   KeyRoute::Gpio(GpioBlockId::Abcd, 5, KeySticky::True,  KeyActive::Low)),
+];
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Model {
     pub name: &'static str,
     pub alias: &'static str,
+    pub soc: SoC,
     pub display_type: DisplayType,
     pub mirrored: bool,
     pub width: usize,
     pub height: usize,
-    pub fastram: usize,
+    pub keymap: &'static [(Ipod4gKey, KeyRoute)],
 }
 
 impl Model {
@@ -77,83 +143,92 @@ impl Model {
         Self {
             name: "iPod (1st gen)",
             alias: "1g",
+            soc: SoC::Pp5002,
             display_type: DisplayType::Mono,
             mirrored: false,
             width: 160,
             height: 128,
-            fastram: 96 * 1024,
+            keymap: IPOD_1G_KEYMAP,
         },
         Self {
             name: "iPod (3rd gen)",
             alias: "3g",
+            soc: SoC::Pp5002,
             display_type: DisplayType::Mono,
             mirrored: false,
             width: 160,
             height: 128,
-            fastram: 96 * 1024,
+            keymap: IPOD_3G_KEYMAP,
         },
         Self {
             name: "iPod (4th gen)",
             alias: "4gmono",
+            soc: SoC::Pp5020,
             display_type: DisplayType::Mono,
             mirrored: false,
             width: 160,
             height: 128,
-            fastram: 96 * 1024,
+            keymap: CLICKWHEEL_KEYMAP,
         },
         Self {
             name: "iPod Photo (early)",
             alias: "4gphoto",
+            soc: SoC::Pp5020,
             display_type: DisplayType::Color,
             mirrored: false,
             width: 220,
             height: 176,
-            fastram: 96 * 1024,
+            keymap: CLICKWHEEL_KEYMAP,
         },
         Self {
             name: "iPod Color (late)",
             alias: "4gcolor",
+            soc: SoC::Pp5020,
             display_type: DisplayType::Hd66789,
             mirrored: false,
             width: 220,
             height: 176,
-            fastram: 96 * 1024,
+            keymap: CLICKWHEEL_KEYMAP,
         },
         Self {
             name: "iPod Video",
             alias: "5gvideo",
+            soc: SoC::Pp5020,
             display_type: DisplayType::Bcm2722,
             mirrored: false,
             width: 320,
             height: 240,
-            fastram: 96 * 1024,
+            keymap: CLICKWHEEL_KEYMAP,
         },
         Self {
             name: "iPod Mini (1st gen)",
             alias: "mini1g",
+            soc: SoC::Pp5020,
             display_type: DisplayType::Mono,
             mirrored: true,
             width: 138,
             height: 110,
-            fastram: 96 * 1024,
+            keymap: IPOD_MINI1G_KEYMAP,
         },
         Self {
             name: "iPod Mini (2nd gen)",
             alias: "mini2g",
+            soc: SoC::Pp5022,
             display_type: DisplayType::Mono,
             mirrored: true,
             width: 138,
             height: 110,
-            fastram: 128 * 1024,
+            keymap: CLICKWHEEL_KEYMAP,
         },
         Self {
             name: "iPod Nano",
             alias: "nano1g",
+            soc: SoC::Pp5020,
             display_type: DisplayType::Hd66789,
             mirrored: false,
             width: 176,
             height: 132,
-            fastram: 96 * 1024,
+            keymap: CLICKWHEEL_KEYMAP,
         },
     ];
 
@@ -163,10 +238,6 @@ impl Model {
             .find(|model| model.alias == s)
             .copied()
             .unwrap_or(Self::ALL[2]) // 4gmono
-    }
-
-    pub fn fastram_size(self) -> usize {
-        self.fastram
     }
 
     pub fn display_type(self) -> DisplayType {
@@ -181,7 +252,7 @@ impl Model {
     }
 
     pub fn make_panel(&self) -> Box<dyn LcdPanel> {
-        use devices::{Hd66753, Hd66xxx, Hd66789, Bcm2722Panel};
+        use devices::{Bcm2722Panel, Hd66753, Hd66789, Hd66xxx};
         match self.display_type() {
             DisplayType::Mono => Box::new(Hd66753::new(self.mirrored)),
             DisplayType::Color => Box::new(Hd66xxx::new()),
@@ -198,20 +269,20 @@ pub enum BootKind<F: Read + Seek> {
 
 #[derive(Debug)]
 struct Ipod4gControls {
-    hold: gpio::Sender,
     controls: devices::Controls<signal::Master>,
+    keys: HashMap<Ipod4gKey, controls::KeySink>,
 }
 
-/// A Ipod4g system
+/// An iPod system
 #[derive(Debug)]
-pub struct Ipod4g {
+pub struct System {
     pub model: Model,
     frozen: bool,         // set after a fatal error to enable post-mortem debugging
     skip_irq_check: bool, // set by the GDB stub when single-stepping though code
 
     cpu: Cpu,
     cop: Cpu,
-    devices: Ipod4gBus,
+    devices: Bus,
     controls: Option<Ipod4gControls>,
     /// A second set of keypad signal masters, used to synthesize key presses
     /// independently of whoever took ownership of the system's controls.
@@ -228,9 +299,19 @@ pub struct Ipod4g {
     executor: Executor,
 }
 
+#[derive(Debug)]
+pub enum Bus {
+    Pp5002(pp::PP5002Bus),
+    Pp502x(pp::PP502xBus),
+}
+
 /// Helper function for calling vectors of EVP
-fn vector_via_evp(core: &mut Cpu, devices: &Ipod4gBus, vector: u32) {
-    if devices.cachecon.local_evt {
+fn vector_via_evp(core: &mut Cpu, devices: &Bus, vector: u32) {
+    let cachecon_local_evt = match devices {
+        Bus::Pp5002(bus) => bus.cachecon.local_evt,
+        Bus::Pp502x(bus) => bus.cachecon.local_evt,
+    };
+    if cachecon_local_evt {
         core.reg_set(core.mode(), reg::PC, vector);
     }
 }
@@ -243,14 +324,14 @@ pub enum Ipod4gBuildError {
     HleBootloader(#[from] hle_bootloader::HleBootloaderError),
 }
 
-impl Ipod4g {
-    /// Returns a new Ipod4g instance.
+impl System {
+    /// Returns a new System instance.
     pub fn new<F>(
         hdd: Box<dyn BlockDev>,
         flash_rom: Option<Box<[u8]>>,
         boot_kind: BootKind<F>,
         model: Model,
-    ) -> Result<Ipod4g, Ipod4gBuildError>
+    ) -> Result<System, Ipod4gBuildError>
     where
         F: Read + Seek,
     {
@@ -263,21 +344,22 @@ impl Ipod4g {
         let i2c_changed = signal::Trigger::new(signal::TriggerKind::Edge);
 
         // hook-up external controls
-        let (mut hold_tx, hold_rx) = gpio::new(gpio_changed.clone(), "Hold");
+        let (hold_tx, hold_rx) = gpio::new(gpio_changed.clone(), "Hold");
         let (controls_tx, controls_rx) = devices::Controls::new_tx_rx(i2c_changed.clone());
 
-        let mut sys = Ipod4g {
+        let mut sys = System {
             model: model,
             frozen: false,
             skip_irq_check: false,
 
             cpu: Cpu::new(),
             cop: Cpu::new(),
-            devices: Ipod4gBus::new(
+            devices: Bus::new(
                 executor.spawner(),
                 irq_pending.clone(),
                 dma_pending.clone(),
                 model,
+                flash_rom,
             ),
             controls: None,
             synthetic_controls: controls_tx.clone(),
@@ -292,42 +374,71 @@ impl Ipod4g {
             executor,
         };
 
-        sys.reset_requested = sys.devices.devcon.reset_requested();
+        sys.reset_requested = sys.devices.devcon().reset_requested();
 
-        // connect HDD
-        sys.devices
-            .eidecon
-            .as_ide()
-            .attach(devices::ide::IdeIdx::IDE0, hdd);
-
-        // Set up flash_rom (if available)
-        if let Some(flash_rom) = flash_rom {
-            sys.devices
-                .flash
-                .use_dump(flash_rom)
-                .map_err(Ipod4gBuildError::InvalidDump)?
+        // HID inputs
+        let mut keys: HashMap<Ipod4gKey, controls::KeySink> = HashMap::new();
+        let mut used_clickwheel = false;
+        for &(key, route) in model.keymap {
+            match route {
+                KeyRoute::ClickWheel => {
+                    used_clickwheel = true;
+                    let master = match key {
+                        Ipod4gKey::Action => controls_tx.action.clone(),
+                        Ipod4gKey::Up => controls_tx.up.clone(),
+                        Ipod4gKey::Down => controls_tx.down.clone(),
+                        Ipod4gKey::Left => controls_tx.left.clone(),
+                        Ipod4gKey::Right => controls_tx.right.clone(),
+                        Ipod4gKey::Hold => continue, // Hold is wired separately
+                    };
+                    keys.insert(key, controls::KeySink::ClickWheel(master));
+                }
+                KeyRoute::Gpio(block, pin, sticky, active) => {
+                    let (mut key_tx, key_rx) = gpio::new(gpio_changed.clone(), controls::key_label(key));
+                    if let Some(gpio_block) = sys.devices.gpio_block(block) {
+                        gpio_block.lock().unwrap().register_in(pin as usize, key_rx);
+                    }
+                    if active == KeyActive::Low { key_tx.set_high(); }
+                    keys.insert(key, controls::KeySink::Gpio(key_tx, sticky == KeySticky::True, active == KeyActive::High));
+                }
+            }
         }
 
-        {
-            let mut gpio_abcd = sys.devices.gpio_abcd.lock().unwrap();
-            gpio_abcd.register_in(5, hold_rx.clone());
+        if used_clickwheel {
+            if let Some(opto) = sys.devices.opto() {
+                opto.register_controls(controls_rx, hold_rx);
+            }
         }
-
-        {
-            sys.devices.opto.register_controls(controls_rx, hold_rx)
-        }
-
-        // HACK: Hold is active-low, so set it to high by default
-        hold_tx.set_high();
 
         sys.controls = Some(Ipod4gControls {
-            hold: hold_tx,
             controls: controls_tx,
+            keys,
         });
+
+        // firewire cable
+        if model.alias == "1g" {
+            let (mut charger_tx, charger_rx) = gpio::new(gpio_changed.clone(), "Charger");
+            let mut gpio_abcd = sys.devices.gpio_abcd().lock().unwrap();
+            gpio_abcd.register_in(2*8 + 7, charger_rx.clone());
+            charger_tx.set_high();
+        }
+
+        // sandbox
+        {
+            let (mut charger_tx, charger_rx) = gpio::new(gpio_changed.clone(), "Sandbox");
+            let mut gpio_abcd = sys.devices.gpio_abcd().lock().unwrap();
+            gpio_abcd.register_in(0*8 + 6, charger_rx.clone());
+            charger_tx.set_high();
+        }
 
         // Run the HLE bootloader if an HLE boot was requested
         if let BootKind::HLEBoot { fw_file } = boot_kind {
             run_hle_bootloader(&mut sys, fw_file)?
+        }
+
+        // connect HDD only on SoCs with an IDE controller
+        if let Some(eidecon) = sys.devices.eidecon_mut() {
+            eidecon.as_ide().attach(devices::ide::IdeIdx::IDE0, hdd);
         }
 
         Ok(sys)
@@ -342,12 +453,12 @@ impl Ipod4g {
     }
 
     fn warm_reset(&mut self) {
-        self.devices.memcon.reset();
-        self.devices.cachecon.reset();
-        self.devices.evp.reset();
-        self.devices.cpucon.reset();
-        self.devices.intcon.reset();
-        self.devices.devcon.reset();
+        self.devices.memcon().reset();
+        self.devices.cachecon().reset();
+        self.devices.evp().reset();
+        self.devices.cpucon().reset();
+        self.devices.intcon().reset();
+        self.devices.devcon().reset();
 
         self.cpu = Cpu::new();
         self.cop = Cpu::new();
@@ -400,7 +511,7 @@ impl Ipod4g {
 
         let devices = &mut self.devices;
         for (cpu, cpuid) in [(&mut self.cpu, CpuId::Cpu), (&mut self.cop, CpuId::Cop)].iter_mut() {
-            if !devices.cpucon.is_cpu_running(*cpuid) {
+            if !devices.cpucon().is_cpu_running(*cpuid) {
                 continue;
             }
 
@@ -409,9 +520,7 @@ impl Ipod4g {
             // enforce MMU "execute" protection bits...
 
             // FIXME: this approach is kinda gross. Maybe add a some "ctx" to `Memory`?
-            devices.cpuid.set_cpuid(*cpuid);
-            devices.memcon.set_cpuid(*cpuid);
-            devices.mailbox.set_cpuid(*cpuid);
+            devices.set_cpuid(*cpuid);
 
             let mut sniffer = MemSniffer::new(devices, sniff_memory.0, |access| {
                 sniff_memory.1(*cpuid, access)
@@ -441,23 +550,24 @@ impl Ipod4g {
         // reorganized, and moved somewhere more appropriate.
         if self.dma_pending.check() {
             self.dma_pending.clear();
-            if devices.dmacon0.do_ide_dma() {
-                let (kind, addr) = match (devices.eidecon).do_dma() {
-                    Ok(tup) => tup,
-                    Err(_) => panic!("asd"),
-                };
-
+            if let Some((kind, addr)) = devices.do_ide_dma() {
                 use crate::memory::MemAccessKind;
                 match kind {
                     MemAccessKind::Read => {
-                        let val = (devices.eidecon.as_ide())
+                        let val = devices
+                            .eidecon_mut()
+                            .unwrap()
+                            .as_ide()
                             .read16(devices::ide::IdeReg::Data)
                             .unwrap();
                         devices.w16(addr, val).unwrap();
                     }
                     MemAccessKind::Write => {
                         let val = devices.r16(addr).unwrap();
-                        (devices.eidecon.as_ide())
+                        devices
+                            .eidecon_mut()
+                            .unwrap()
+                            .as_ide()
                             .write16(devices::ide::IdeReg::Data, val)
                             .unwrap();
                     }
@@ -470,18 +580,20 @@ impl Ipod4g {
 
         // TODO?: explore adding callbacks to the signaling system
         if self.gpio_changed.check_and_clear() {
-            devices.gpio_abcd.lock().unwrap().update();
-            devices.gpio_efgh.lock().unwrap().update();
-            devices.gpio_ijkl.lock().unwrap().update();
+            devices.update_gpios();
         }
         if self.i2c_changed.check_and_clear() {
-            devices.opto.on_change();
+            if let Some(opto) = devices.opto() {
+                opto.on_change();
+            }
         }
 
         if self.irq_pending.check() {
             use armv4t_emu::Exception;
 
-            let (cpu_status, cop_status) = devices.intcon.interrupt_status();
+            let (cpu_status, cop_status) = devices.intcon().interrupt_status();
+            let normal_irq_vec = devices.evp().normal_irq_vec();
+            let high_priority_irq_vec = devices.evp().high_priority_irq_vec();
 
             for (core, cpuid, status) in [
                 (&mut self.cpu, CpuId::Cpu, cpu_status),
@@ -490,11 +602,11 @@ impl Ipod4g {
             .iter_mut()
             {
                 if status.irq {
-                    devices.cpucon.wake_on_interrupt(*cpuid);
+                    devices.cpucon().wake_on_interrupt(*cpuid);
                     let taken = core.irq_enable();
                     core.exception(Exception::Interrupt);
                     if taken {
-                        vector_via_evp(core, devices, devices.evp.normal_irq_vec());
+                        vector_via_evp(core, devices, normal_irq_vec);
                     }
 
                     if core.irq_enable() {
@@ -502,11 +614,11 @@ impl Ipod4g {
                     }
                 }
                 if status.fiq {
-                    devices.cpucon.wake_on_interrupt(*cpuid);
+                    devices.cpucon().wake_on_interrupt(*cpuid);
                     let taken = core.fiq_enable();
                     core.exception(Exception::FastInterrupt);
                     if taken {
-                        vector_via_evp(core, devices, devices.evp.high_priority_irq_vec());
+                        vector_via_evp(core, devices, high_priority_irq_vec);
                     }
 
                     if core.fiq_enable() {
@@ -548,358 +660,251 @@ impl Ipod4g {
 
     /// Return the system's RenderCallback method.
     pub fn render_callback(&self) -> RenderCallback {
-        match self.model.display_type()  {
-            DisplayType::Mono                         => self.devices.mlcd.render_callback(),
-            DisplayType::Color | DisplayType::Hd66789 => self.devices.clcd.render_callback(),
-            DisplayType::Bcm2722                      => self.devices.bcm_video.render_callback(),
-        }
+        self.devices.render_callback(&self.model)
     }
 }
 
-/// The main Ipod4g memory bus.
-///
-/// This struct is the "top-level" implementation of the [Memory] trait for the
-/// Ipod4g, and maps the entire 32 bit address space to the Ipod4g's various
-/// devices.
-#[derive(Debug)]
-pub struct Ipod4gBus {
-    pub sdram: devices::AsanRam,
-    pub fastram: devices::AsanRam,
-    pub cpuid: devices::CpuIdReg,
-    pub flash: devices::Flash,
-    pub cpucon: devices::CpuCon,
-    pub mlcd: devices::MonoLcdBridge,
-    pub clcd: devices::ColorLcdBridge,
-    pub timer1: devices::CfgTimer,
-    pub timer2: devices::CfgTimer,
-    pub usec_timer: devices::UsecTimer,
-    pub firewire: devices::Firewire,
-    pub usb: devices::Usb,
-    pub gpio_abcd: ArcMutexDevice<devices::GpioBlock>,
-    pub gpio_efgh: ArcMutexDevice<devices::GpioBlock>,
-    pub gpio_ijkl: ArcMutexDevice<devices::GpioBlock>,
-    pub gpio_mirror_abcd: devices::GpioBlockAtomicMirror,
-    pub gpio_mirror_efgh: devices::GpioBlockAtomicMirror,
-    pub gpio_mirror_ijkl: devices::GpioBlockAtomicMirror,
-    pub i2ccon: devices::I2CCon,
-    pub opto: devices::OptoWheel,
-    pub ppcon: devices::PPCon,
-    pub devcon: devices::DevCon,
-    pub intcon: devices::IntCon,
-    pub eidecon: devices::EIDECon,
-    pub memcon: devices::MemCon,
-    pub cachecon: devices::CacheCon,
-    pub i2s: devices::I2SCon,
-    pub mailbox: devices::Mailbox,
-    pub dmacon0: devices::DmaCon,
-    pub dmacon1: devices::DmaCon,
-    pub serial0: devices::Serial,
-    pub serial1: devices::Serial,
-    pub evp: devices::Evp,
-    pub rtc: devices::Rtc,
-
-    pub mystery_irq_con: devices::Stub,
-    pub mystery_lcd_con: devices::Stub,
-    pub mystery_flash_stub: devices::Stub,
-    pub total_mystery: devices::Stub,
-    pub pwmcon: devices::PWMCon,
-    pub bcm_video: devices::Bcm2722,
-
-    pub pp5002_serial_stub: devices::Stub,
-}
-
-impl Ipod4gBus {
-    #[allow(clippy::redundant_clone)] // Makes the code cleaner in this case
+impl Bus {
     fn new(
         task_spawner: Spawner,
         irq_pending: irq::Pending,
         dma_pending: irq::Pending,
         model: Model,
-    ) -> Ipod4gBus {
-        let (ide_irq_tx, ide_irq_rx) = irq::new(irq_pending.clone(), "IDE");
-        let (timer1_irq_tx, timer1_irq_rx) = irq::new(irq_pending.clone(), "Timer1");
-        let (timer2_irq_tx, timer2_irq_rx) = irq::new(irq_pending.clone(), "Timer2");
-        let (gpio0_irq_tx, gpio0_irq_rx) = irq::new(irq_pending.clone(), "GPIO0");
-        let (gpio1_irq_tx, gpio1_irq_rx) = irq::new(irq_pending.clone(), "GPIO1");
-        let (gpio2_irq_tx, gpio2_irq_rx) = irq::new(irq_pending.clone(), "GPIO2");
-        let (i2c_irq_tx, i2c_irq_rx) = irq::new(irq_pending.clone(), "I2C");
+        flash_rom: Option<Box<[u8]>>,
+    ) -> Bus {
+        match model.soc {
+            SoC::Pp5002 => Bus::Pp5002(pp::PP5002Bus::new(
+                model,
+                task_spawner,
+                irq_pending,
+                dma_pending,
+                flash_rom,
+            )),
+            SoC::Pp5020 => Bus::Pp502x(pp::PP502xBus::new(
+                model,
+                task_spawner,
+                irq_pending,
+                dma_pending,
+                flash_rom,
+            )),
+            SoC::Pp5022 => Bus::Pp502x(pp::PP502xBus::new(
+                model,
+                task_spawner,
+                irq_pending,
+                dma_pending,
+                flash_rom,
+            )),
+        }
+    }
 
-        let (ide_dmarq_tx, ide_dmarq_rx) = irq::new(dma_pending.clone(), "IDE DMA");
+    fn set_cpuid(&mut self, cpuid: CpuId) {
+        match self {
+            Bus::Pp5002(bus) => bus.set_cpuid(cpuid),
+            Bus::Pp502x(bus) => {
+                bus.set_cpuid(cpuid);
+                bus.mailbox.set_cpuid(cpuid);
+            }
+        }
+    }
 
-        // mailbox is the only core-specific IRQ in the system, which is kinda neat
-        let (mbx_cpu_irq_tx, mbx_cpu_irq_rx) = irq::new(irq_pending.clone(), "Mailbox (CPU)");
-        let (mbx_cop_irq_tx, mbx_cop_irq_rx) = irq::new(irq_pending.clone(), "Mailbox (COP)");
+    fn cpucon(&mut self) -> &mut dyn devices::CpuConDevice {
+        match self {
+            Bus::Pp5002(bus) => &mut bus.cpucon,
+            Bus::Pp502x(bus) => &mut bus.cpucon,
+        }
+    }
 
-        let gpio_abcd = ArcMutexDevice::new(GpioBlock::new(gpio0_irq_tx, ["A", "B", "C", "D"]));
-        let gpio_efgh = ArcMutexDevice::new(GpioBlock::new(gpio1_irq_tx, ["E", "F", "G", "H"]));
-        let gpio_ijkl = ArcMutexDevice::new(GpioBlock::new(gpio2_irq_tx, ["I", "J", "K", "L"]));
+    fn memcon(&mut self) -> &mut devices::MemCon {
+        match self {
+            Bus::Pp5002(bus) => &mut bus.memcon,
+            Bus::Pp502x(bus) => &mut bus.memcon,
+        }
+    }
 
-        let gpio_mirror_abcd = gpio_abcd.clone();
-        let gpio_mirror_efgh = gpio_efgh.clone();
-        let gpio_mirror_ijkl = gpio_ijkl.clone();
+    fn cachecon(&mut self) -> &mut devices::CacheCon {
+        match self {
+            Bus::Pp5002(bus) => &mut bus.cachecon,
+            Bus::Pp502x(bus) => &mut bus.cachecon,
+        }
+    }
 
-        let mut intcon = IntCon::new();
-        intcon
-            .register(0, timer1_irq_rx)
-            .register(1, timer2_irq_rx)
-            .register_core_specific(4, mbx_cpu_irq_rx, mbx_cop_irq_rx)
-            // .register(10, i2s_irq_rx)
-            // .register(20, usb_irq_rx)
-            .register(23, ide_irq_rx)
-            // .register(25, firewire_irq_rx)
-            // .register(26, dma_irq_rx)
-            .register(32, gpio0_irq_rx)
-            .register(33, gpio1_irq_rx)
-            .register(34, gpio2_irq_rx)
-            // .register(36, ser0_irq_rx)
-            // .register(37, ser1_irq_rx)
-            .register(40, i2c_irq_rx);
+    fn evp(&mut self) -> &mut devices::Evp {
+        match self {
+            Bus::Pp5002(bus) => &mut bus.evp,
+            Bus::Pp502x(bus) => &mut bus.evp,
+        }
+    }
 
-        let dmacon0 = DmaCon::new("0", Some(ide_dmarq_rx));
-        // the undocumented second engine -- nothing routes DMA requests to it yet
-        let dmacon1 = DmaCon::new("1", None);
+    fn intcon(&mut self) -> &mut devices::IntCon {
+        match self {
+            Bus::Pp5002(bus) => &mut bus.intcon,
+            Bus::Pp502x(bus) => &mut bus.intcon,
+        }
+    }
 
-        let mut i2ccon = I2CCon::new(i2c_irq_tx.clone());
-        i2ccon.register_device(0x08, Box::new(i2c::Pcf5060x::new()));
+    fn devcon(&mut self) -> &mut devices::DevCon {
+        match self {
+            Bus::Pp5002(bus) => &mut bus.devcon,
+            Bus::Pp502x(bus) => &mut bus.devcon,
+        }
+    }
 
-        use devices::*;
-        Ipod4gBus {
-            sdram: AsanRam::new(32 * 1024 * 1024, true), // 32 MB
-            fastram: AsanRam::new(model.fastram_size(), true),
-            cpuid: CpuIdReg::new(),
-            firewire: Firewire::new(),
-            usb: Usb::new(),
-            flash: Flash::new(),
-            cpucon: CpuCon::new(task_spawner.clone()),
-            mlcd: MonoLcdBridge::new(model.make_panel()),
-            clcd: ColorLcdBridge::new(model.make_panel()),
-            timer1: CfgTimer::new("1", timer1_irq_tx, task_spawner.clone()),
-            timer2: CfgTimer::new("2", timer2_irq_tx, task_spawner),
-            usec_timer: UsecTimer::new(),
-            gpio_abcd,
-            gpio_efgh,
-            gpio_ijkl,
-            gpio_mirror_abcd: GpioBlockAtomicMirror::new(gpio_mirror_abcd),
-            gpio_mirror_efgh: GpioBlockAtomicMirror::new(gpio_mirror_efgh),
-            gpio_mirror_ijkl: GpioBlockAtomicMirror::new(gpio_mirror_ijkl),
-            i2ccon,
-            opto: OptoWheel::new(i2c_irq_tx),
-            ppcon: PPCon::new(),
-            devcon: DevCon::new(),
-            intcon,
-            eidecon: EIDECon::new(ide_irq_tx, ide_dmarq_tx),
-            memcon: MemCon::new(),
-            cachecon: CacheCon::new(),
-            i2s: I2SCon::new(),
-            mailbox: Mailbox::new(mbx_cpu_irq_tx, mbx_cop_irq_tx),
-            dmacon0,
-            dmacon1,
-            serial0: Serial::new("0"),
-            serial1: Serial::new("1"),
-            evp: Evp::new(),
-            rtc: Rtc::new(),
+    pub(super) fn flash(&self) -> &devices::Flash {
+        match self {
+            Bus::Pp5002(bus) => &bus.flash,
+            Bus::Pp502x(bus) => &bus.flash,
+        }
+    }
 
-            mystery_irq_con: Stub::new("Mystery IRQ Con?"),
-            mystery_lcd_con: Stub::new("Mystery LCD Con?"),
-            mystery_flash_stub: Stub::new("Mystery FlashROM Con?"),
-            total_mystery: Stub::new("(?) Arbiter Priority"),
-            pwmcon: PWMCon::new(),
-            bcm_video: Bcm2722::new(model.make_panel()),
+    pub(super) fn sdram(&mut self) -> &mut devices::AsanRam {
+        match self {
+            Bus::Pp5002(bus) => &mut bus.sdram,
+            Bus::Pp502x(bus) => &mut bus.sdram,
+        }
+    }
 
-            pp5002_serial_stub: Stub::new("PP5002 serial stub"),
+    pub(super) fn fastram(&mut self) -> &mut devices::AsanRam {
+        match self {
+            Bus::Pp5002(bus) => &mut bus.fastram,
+            Bus::Pp502x(bus) => &mut bus.fastram,
+        }
+    }
+
+    pub(super) fn gpio_abcd(&mut self) -> &ArcMutexDevice<devices::GpioBlock> {
+        match self {
+            Bus::Pp5002(bus) => &bus.gpio_abcd,
+            Bus::Pp502x(bus) => &bus.gpio_abcd,
+        }
+    }
+
+    pub(super) fn gpio_block(&mut self, which: GpioBlockId) -> Option<&ArcMutexDevice<devices::GpioBlock>> {
+        match (self, which) {
+            (Bus::Pp5002(bus), GpioBlockId::Abcd) => Some(&bus.gpio_abcd),
+            (Bus::Pp5002(_), _) => None,
+            (Bus::Pp502x(bus), GpioBlockId::Abcd) => Some(&bus.gpio_abcd),
+            (Bus::Pp502x(bus), GpioBlockId::Efgh) => Some(&bus.gpio_efgh),
+            (Bus::Pp502x(bus), GpioBlockId::Ijkl) => Some(&bus.gpio_ijkl),
+        }
+    }
+
+    fn opto(&mut self) -> Option<&mut devices::OptoWheel> {
+        match self {
+            Bus::Pp5002(_) => None,
+            Bus::Pp502x(bus) => Some(&mut bus.opto),
+        }
+    }
+
+    fn update_gpios(&mut self) {
+        match self {
+            Bus::Pp5002(bus) => {
+                bus.gpio_abcd.lock().unwrap().update();
+            }
+            Bus::Pp502x(bus) => {
+                bus.gpio_abcd.lock().unwrap().update();
+                bus.gpio_efgh.lock().unwrap().update();
+                bus.gpio_ijkl.lock().unwrap().update();
+            }
+        }
+    }
+
+    fn do_ide_dma(&mut self) -> Option<(crate::memory::MemAccessKind, u32)> {
+        match self {
+            Bus::Pp5002(_) => None,
+            Bus::Pp502x(bus) => {
+                if bus.dmacon0.do_ide_dma() {
+                    bus.eidecon.do_dma().ok()
+                } else {
+                    None
+                }
+            }
+        }
+    }
+
+    fn eidecon_mut(&mut self) -> Option<&mut devices::EIDECon> {
+        match self {
+            Bus::Pp5002(bus) => Some(&mut bus.eidecon),
+            Bus::Pp502x(bus) => Some(&mut bus.eidecon),
+        }
+    }
+
+    fn render_callback(&self, model: &Model) -> RenderCallback {
+        match self {
+            Bus::Pp5002(bus) => bus.render_callback(model),
+            Bus::Pp502x(bus) => bus.render_callback(model),
         }
     }
 }
 
-macro_rules! mmap {
-    (
-        RAM {
-            $($start_ram:literal $(..= $end_ram:literal)? => $ram:ident,)*
+impl Device for Bus {
+    fn kind(&self) -> &'static str {
+        match self {
+            Bus::Pp5002(_) => "Pp5002Bus",
+            Bus::Pp502x(_) => "Pp502xBus",
         }
-        DEVICES {
-            $($start_dev:literal $(..= $end_dev:literal)? => $dev:ident,)*
-        }
-    ) => {
-        macro_rules! impl_mem_r {
-            ($fn:ident, $ret:ty) => {
-                fn $fn(&mut self, addr: u32) -> MemResult<$ret> {
-                    let mut addr = addr;
-                    if (0x00..0x1F).contains(&addr) && self.cachecon.local_evt {
-                        addr |= 0x6000_f100;
-                    }
-
-                    let (phys_addr, prot) = self.memcon.virt_to_phys(addr, MemAccessKind::Read);
-                    if !prot.r {
-                        return Err(MemException::MmuViolation)
-                    }
-
-                    match phys_addr {
-                        $($start_ram$(..=$end_ram)? => self.$ram.$fn(phys_addr - $start_ram),)*
-                        $($start_dev$(..=$end_dev)? => self.$dev.$fn(phys_addr - $start_dev),)*
-                        _ => Err(MemException::Unexpected),
-                    }
-                }
-            };
-        }
-
-        macro_rules! impl_mem_w {
-            ($fn:ident, $val:ty) => {
-                fn $fn(&mut self, addr: u32, val: $val) -> MemResult<()> {
-                    let (phys_addr, prot) = self.memcon.virt_to_phys(addr, MemAccessKind::Write);
-                    if !prot.w {
-                        return Err(MemException::MmuViolation)
-                    }
-
-                    match phys_addr {
-                        $($start_ram$(..=$end_ram)? => self.$ram.$fn(phys_addr - $start_ram, val),)*
-                        $($start_dev$(..=$end_dev)? => self.$dev.$fn(phys_addr - $start_dev, val),)*
-                        _ => Err(MemException::Unexpected),
-                    }
-                }
-            };
-        }
-
-        macro_rules! impl_mem_x {
-            ($fn:ident, $ret:ty) => {
-                fn $fn(&mut self, addr: u32) -> MemResult<$ret> {
-                    let phys_addr = if (0x00..0x1F).contains(&addr) && self.cachecon.local_evt {
-                        match self.evp.r32(addr) {
-                            Ok(val) => val,
-                            Err(e) => {
-                                return Err(e);
-                            }
-                        }
-                    } else {
-                        let (final_addr, prot) = self.memcon.virt_to_phys(addr, MemAccessKind::Execute);
-                        if !prot.x {
-                            return Err(MemException::MmuViolation)
-                        }
-                        final_addr
-                    };
-
-                    match phys_addr {
-                        $($start_ram$(..=$end_ram)? => self.$ram.$fn(phys_addr - $start_ram),)*
-                        $($start_dev$(..=$end_dev)? => self.$dev.$fn(phys_addr - $start_dev),)*
-                        _ => Err(MemException::Unexpected),
-                    }
-                }
-            };
-        }
-
-        impl Device for Ipod4gBus {
-            fn kind(&self) -> &'static str {
-                "Ipod4g"
-            }
-
-            fn probe(&self, addr: u32) -> Probe {
-                let (addr, _) = self.memcon.virt_to_phys(addr, MemAccessKind::Read);
-                match addr {
-                    $($start_ram$(..=$end_ram)? => {
-                        Probe::from_device(&self.$ram, addr - $start_ram)
-                    })*
-                    $($start_dev$(..=$end_dev)? => {
-                        Probe::from_device(&self.$dev, addr - $start_dev)
-                    })*
-                    _ => Probe::Unmapped,
-                }
-            }
-        }
-
-        impl Memory for Ipod4gBus {
-            impl_mem_r!(r8, u8);
-            impl_mem_r!(r16, u16);
-            impl_mem_r!(r32, u32);
-            impl_mem_w!(w8, u8);
-            impl_mem_w!(w16, u16);
-            impl_mem_w!(w32, u32);
-            impl_mem_x!(x16, u16);
-            impl_mem_x!(x32, u32);
-        }
-    };
-}
-
-mmap! {
-    RAM {
-        0x1000_0000..=0x11ff_ffff => sdram,
-        0x1200_0000..=0x12ff_ffff => sdram, // mirror
-        // 0x4000_0000..=0x4001_7fff => fastram, // PP5020
-        0x4000_0000..=0x4001_ffff => fastram, // PP5022
     }
 
-    DEVICES {
-        0x0000_0000..=0x000f_ffff => flash,
-        0x3000_0000..=0x3007_ffff => bcm_video,
-        0x6000_0000..=0x6000_0fff => cpuid,
-        0x6000_1000..=0x6000_102f => mailbox,
-        0x6000_4000..=0x6000_41ff => intcon,
-        0x6000_5000..=0x6000_5007 => timer1,
-        0x6000_5008..=0x6000_500f => timer2,
-        0x6000_5010..=0x6000_5013 => usec_timer,
-        0x6000_5014..=0x6000_5017 => rtc,
-        0x6000_6000..=0x6000_6fff => devcon,
-        0x6000_7000..=0x6000_7fff => cpucon,
-        // Memory accesses to dmacon1 are suspiciously similar to dmacon0
-        0x6000_8000..=0x6000_9fff => dmacon1,
-        0x6000_a000..=0x6000_bfff => dmacon0,
-        0x6000_c000..=0x6000_cfff => cachecon,
-        0x6000_d000..=0x6000_d07f => gpio_abcd,
-        0x6000_d080..=0x6000_d0ff => gpio_efgh,
-        0x6000_d100..=0x6000_d17f => gpio_ijkl,
-        0x6000_d800..=0x6000_d87f => gpio_mirror_abcd,
-        0x6000_d880..=0x6000_d8ff => gpio_mirror_efgh,
-        0x6000_d900..=0x6000_d97f => gpio_mirror_ijkl,
+    fn probe(&self, addr: u32) -> Probe {
+        match self {
+            Bus::Pp5002(bus) => bus.probe(addr),
+            Bus::Pp502x(bus) => bus.probe(addr),
+        }
+    }
+}
 
-        0x6400_4000..=0x6400_41ff => intcon, // i guess there's a mirror?
+impl Memory for Bus {
+    fn r8(&mut self, addr: u32) -> MemResult<u8> {
+        match self {
+            Bus::Pp5002(bus) => bus.r8(addr),
+            Bus::Pp502x(bus) => bus.r8(addr),
+        }
+    }
 
-        0x7000_0000..=0x7000_1fff => ppcon,
-        0x7000_3000..=0x7000_301f => mlcd,
-        0x7000_6000..=0x7000_603f => serial0,
-        0x7000_6040..=0x7000_607f => serial1,
-        0x7000_8a00..=0x7000_8b0f => clcd,
-        0x7000_a000..=0x7000_a03f => pwmcon,
-        0x7000_c000..=0x7000_c0ff => i2ccon,
-        0x7000_c100..=0x7000_c1ff => opto,
-        0x7000_2800..=0x7000_28ff => i2s,
-        0xc300_0000..=0xc300_0fff => eidecon,
-        0xf000_0000..=0xf000_ffff => memcon,
+    fn r16(&mut self, addr: u32) -> MemResult<u16> {
+        match self {
+            Bus::Pp5002(bus) => bus.r16(addr),
+            Bus::Pp502x(bus) => bus.r16(addr),
+        }
+    }
 
-        0x6000_f000..=0x6000_f01f => evp, // Tegra drivers mention 0x6000F1xx but 0x6000F0xx is mentioned in PP5020 RE litterature
-        0x6000_f100..=0x6000_f11f => evp, // I assume 0x6000F0xx and 0x6000F1xx are mirrored? Maybe one is used for the main CPU,
-                                          // the other is used for COP?
+    fn r32(&mut self, addr: u32) -> MemResult<u32> {
+        match self {
+            Bus::Pp5002(bus) => bus.r32(addr),
+            Bus::Pp502x(bus) => bus.r32(addr),
+        }
+    }
 
-        // all the stubs
+    fn w8(&mut self, addr: u32, val: u8) -> MemResult<()> {
+        match self {
+            Bus::Pp5002(bus) => bus.w8(addr, val),
+            Bus::Pp502x(bus) => bus.w8(addr, val),
+        }
+    }
 
-        0x6000_1038 => mystery_irq_con,
-        0x6000_111c => mystery_irq_con,
-        0x6000_1128 => mystery_irq_con,
-        0x6000_1138 => mystery_irq_con,
+    fn w16(&mut self, addr: u32, val: u16) -> MemResult<()> {
+        match self {
+            Bus::Pp5002(bus) => bus.w16(addr, val),
+            Bus::Pp502x(bus) => bus.w16(addr, val),
+        }
+    }
 
-        // Four registers at +0x00/+0x04/+0x08/+0x0c, RetailOS programs them
-        // from one straight-line routine, never touched in diags.
-        //
-        // The values it writes are a cyclic Latin square:
-        //
-        //           +0x00  +0x04  +0x08  +0x0c
-        //   bits0-1   0      1      2      3
-        //   bits2-3   3      0      1      2
-        //   bits4-5   2      3      0      1
-        //   bits6-7   1      2      3      0
-        //
-        // Undocumented everywhere. Arbiter priority matrix of Multi Path Mem
-        // Controller?
-        0x6000_3000..=0x6000_30ff => total_mystery,
-        0x7000_2c00 => total_mystery,
-        0x7000_c300..=0x7000_c3ff => total_mystery, // triggered by 5g with nor but no hdd
-        // Diagnostics program reads from address, and write back 0x10000000
-        0x7000_3800 => total_mystery,
-        0xc031_b1d8 => mystery_flash_stub,
-        0xc031_b1e8 => mystery_flash_stub,
-        0xc500_0000..=0xc500_01ff => usb,
-        0xc600_0000..=0xc600_01ff => firewire,
-        0xffff_fe00..=0xffff_ffff => mystery_flash_stub,
+    fn w32(&mut self, addr: u32, val: u32) -> MemResult<()> {
+        match self {
+            Bus::Pp5002(bus) => bus.w32(addr, val),
+            Bus::Pp502x(bus) => bus.w32(addr, val),
+        }
+    }
 
-        // PP5002 addresses, I know, but iPodLinux uses that
-        0xc000_6000..=0xc000_6020 => pp5002_serial_stub,
-        0xc000_6040..=0xc000_6060 => pp5002_serial_stub,
+    fn x16(&mut self, addr: u32) -> MemResult<u16> {
+        match self {
+            Bus::Pp5002(bus) => bus.x16(addr),
+            Bus::Pp502x(bus) => bus.x16(addr),
+        }
+    }
+
+    fn x32(&mut self, addr: u32) -> MemResult<u32> {
+        match self {
+            Bus::Pp5002(bus) => bus.x32(addr),
+            Bus::Pp502x(bus) => bus.x32(addr),
+        }
     }
 }

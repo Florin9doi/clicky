@@ -1,11 +1,11 @@
-use super::{Ipod4g, Ipod4gControls};
+use super::{Ipod4gControls, System};
 
 use std::collections::HashMap;
 use std::str::FromStr;
 
 use crate::devices::platform::pp::Controls;
 use crate::gui::{ButtonCallback, ScrollCallback, TakeControls};
-use crate::signal;
+use crate::signal::{self, gpio};
 
 #[derive(Debug, Copy, Clone, Hash, Eq, PartialEq)]
 pub enum Ipod4gKey {
@@ -17,66 +17,91 @@ pub enum Ipod4gKey {
     Hold,
 }
 
+pub(super) fn key_label(key: Ipod4gKey) -> &'static str {
+    match key {
+        Ipod4gKey::Up => "Up",
+        Ipod4gKey::Down => "Down",
+        Ipod4gKey::Left => "Left",
+        Ipod4gKey::Right => "Right",
+        Ipod4gKey::Action => "Action",
+        Ipod4gKey::Hold => "Hold",
+    }
+}
+
+#[derive(Debug)]
+pub(super) enum KeySink {
+    ClickWheel(signal::Master),
+    Gpio(gpio::Sender, bool, bool),
+}
+
+impl KeySink {
+    fn set(&mut self, pressed: bool) {
+        match self {
+            KeySink::ClickWheel(signal) => {
+                if pressed {
+                    signal.assert()
+                } else {
+                    signal.clear()
+                }
+            }
+            KeySink::Gpio(sender, sticky, active) => {
+                if *sticky {
+                    // toggle on and off
+                    if pressed {
+                        match sender.is_set_high() {
+                            false => sender.set_high(),
+                            true => sender.set_low(),
+                        }
+                    }
+                } else {
+                    if pressed ^ *active {
+                        sender.set_high()
+                    } else {
+                        sender.set_low()
+                    }
+                }
+            }
+        }
+    }
+}
+
 #[derive(Default)]
 pub struct Ipod4gBinds {
     pub keys: HashMap<Ipod4gKey, ButtonCallback>,
     pub wheel: Option<ScrollCallback>,
 }
 
-impl TakeControls for Ipod4g {
+impl TakeControls for System {
     type Controls = Ipod4gBinds;
 
     fn take_controls(&mut self) -> Option<Ipod4gBinds> {
         let Ipod4gControls {
-            mut hold,
-            controls:
-                Controls {
-                    mut action,
-                    mut up,
-                    mut down,
-                    mut left,
-                    mut right,
-                    wheel: (mut wheel_active, wheel_data),
-                },
+            controls: devices_controls,
+            keys: mut key_sinks,
         } = self.controls.take()?;
 
         let mut controls = Ipod4gBinds::default();
 
-        controls.keys.insert(
+        for key in [
+            Ipod4gKey::Up,
+            Ipod4gKey::Down,
+            Ipod4gKey::Left,
+            Ipod4gKey::Right,
+            Ipod4gKey::Action,
             Ipod4gKey::Hold,
-            Box::new(move |pressed| {
-                if pressed {
-                    // toggle on and off
-                    match hold.is_set_high() {
-                        false => hold.set_high(),
-                        true => hold.set_low(),
-                    }
-                }
-            }),
-        );
-
-        macro_rules! connect_controls_btn {
-            ($key:expr, $signal:expr) => {
+        ] {
+            if let Some(mut sink) = key_sinks.remove(&key) {
                 controls.keys.insert(
-                    $key,
+                    key,
                     Box::new(move |pressed| {
-                        if pressed {
-                            $signal.assert()
-                        } else {
-                            $signal.clear()
-                        }
-                    }),
+                        sink.set(!pressed)
+                    })
                 );
-            };
+            }
         }
 
-        connect_controls_btn!(Ipod4gKey::Up, up);
-        connect_controls_btn!(Ipod4gKey::Down, down);
-        connect_controls_btn!(Ipod4gKey::Left, left);
-        connect_controls_btn!(Ipod4gKey::Right, right);
-        connect_controls_btn!(Ipod4gKey::Action, action);
-
         // TODO: make sensitivity adjustable based on user's scroll speed
+        let (mut wheel_active, wheel_data) = devices_controls.wheel;
         controls.wheel = Some({
             Box::new(move |(_dx, dy)| {
                 // HACK: the signal is edge-triggered

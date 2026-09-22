@@ -27,7 +27,8 @@ impl Device for I2SCon {
         let reg = match offset {
             0x00 => "Config",
             0x08 => "Clock",
-            0x0c => "Fifo Config",
+            0x0c => "Fifo Config", // pp502x
+            0x1c => "Fifo Config", // pp5002
             0x40 => "Fifo Write",
             0x80 => "Fifo Read",
             _ => return Probe::Unmapped,
@@ -42,7 +43,7 @@ impl Memory for I2SCon {
         match offset {
             0x00 => Err(StubRead(Error, self.config)),
             0x08 => Err(StubRead(Error, self.clock)),
-            0x0c => Err(StubRead(Error, self.fifo_cfg)),
+            0x0c | 0x1c => Err(StubRead(Error, self.fifo_cfg)),
             0x40 => Err(Unimplemented),
             0x80 => Err(Unimplemented),
             _ => Err(Unexpected),
@@ -53,7 +54,7 @@ impl Memory for I2SCon {
         match offset {
             0x00 => Err(StubWrite(Error, self.config = val)),
             0x08 => Err(StubWrite(Error, self.clock = val)),
-            0x0c => Err(StubWrite(Error, self.fifo_cfg = val)),
+            0x0c | 0x1c => Err(StubWrite(Error, self.fifo_cfg = val)),
             0x40 => Err(Unimplemented),
             0x80 => Err(Unimplemented),
             _ => Err(Unexpected),

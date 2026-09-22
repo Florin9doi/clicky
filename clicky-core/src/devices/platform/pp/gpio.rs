@@ -152,7 +152,7 @@ impl Memory for GpioPort {
             0x00 => Ok(self.enable as u32),
             0x10 => Ok(self.output_enable as u32),
             0x20 => Ok(self.output_val as u32),
-            0x30 => Ok(self.input_val as u32 | 0x10),
+            0x30 => Ok(self.input_val as u32),
             // ipod photo
             // hwid = 0x60000, gpio ignored -> photo (early) display
             // ipod color
@@ -165,7 +165,7 @@ impl Memory for GpioPort {
             0x40 => Ok(self.interrupt_status as u32),
             0x50 => Ok(self.interrupt_enable as u32),
             0x60 => Ok(self.interrupt_level as u32),
-            0x70 => Err(InvalidAccess),
+            0x70 => Ok(self.interrupt_status as u32),
             _ => Err(Unexpected),
         }
     }
@@ -196,7 +196,6 @@ impl Memory for GpioPort {
 #[derive(Debug)]
 pub struct GpioBlock {
     port: [GpioPort; 4],
-    irq_mask: Arc<AtomicU32>,
 }
 
 impl GpioBlock {
@@ -208,8 +207,7 @@ impl GpioBlock {
                 GpioPort::new(irq.clone(), irq_mask.clone(), 1, labels[1]),
                 GpioPort::new(irq.clone(), irq_mask.clone(), 2, labels[2]),
                 GpioPort::new(irq,         irq_mask.clone(), 3, labels[3]),
-            ],
-            irq_mask
+            ]
         }
     }
 

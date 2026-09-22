@@ -25,6 +25,10 @@ mod serial;
 mod usb;
 mod usec_timer;
 mod pwm;
+mod cpucon_device;
+mod cpucon_5002;
+mod tsb43aa82;
+mod unk_5002_4000;
 
 pub use cachecon::*;
 pub use cfg_timer::*;
@@ -51,6 +55,10 @@ pub use serial::*;
 pub use usb::*;
 pub use usec_timer::*;
 pub use pwm::*;
+pub use cpucon_device::*;
+pub use cpucon_5002::*;
+pub use tsb43aa82::*;
+pub use unk_5002_4000::*;
 
 pub mod common {
     #[derive(Debug, Copy, Clone, PartialEq, Eq)]

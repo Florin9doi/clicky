@@ -48,6 +48,8 @@ impl Memory for CacheCon {
                     .set_bit(1, self.cache_ctrl_enable);
                 Err(StubRead(Warn, val))
             }
+            0x04 => Err(StubRead(Warn, 0)), // pp5002 cache
+            0x08 => Err(StubRead(Warn, 0)), // pp5002 cache
             0x10 => Err(InvalidAccess),
             0x34 => Err(InvalidAccess),
             _ => Err(Unexpected),
@@ -61,6 +63,7 @@ impl Memory for CacheCon {
                 self.cache_ctrl_enable = val.get_bit(1);
                 Err(StubWrite(Error, ()))
             }
+            0x04 => Err(StubWrite(Error, ())), // pp5002 cache
             0x10 => Err(StubWrite(Error, ())),
             0x34 => Err(StubWrite(Error, ())),
             _ => Err(Unexpected),

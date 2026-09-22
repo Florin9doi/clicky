@@ -3,6 +3,7 @@ use crate::devices::prelude::*;
 use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
+use crate::devices::platform::pp::CpuConDevice;
 
 pub use super::common::CpuId;
 
@@ -217,4 +218,10 @@ impl Memory for CpuCon {
             _ => Err(Unexpected),
         }
     }
+}
+
+impl CpuConDevice for CpuCon {
+    fn reset(&mut self) { self.reset() }
+    fn is_cpu_running(&mut self, cpu: CpuId) -> bool { self.is_cpu_running(cpu) }
+    fn wake_on_interrupt(&mut self, cpu: CpuId) { self.wake_on_interrupt(cpu) }
 }
