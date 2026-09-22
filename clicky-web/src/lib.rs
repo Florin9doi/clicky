@@ -8,7 +8,7 @@ use wasm_bindgen::prelude::*;
 
 use clicky_core::block::{self, BlockDev};
 use clicky_core::gui::{RenderCallback, TakeControls};
-use clicky_core::sys::ipod4g::{BootKind, Ipod4g, Ipod4gBinds, Ipod4gKey};
+use clicky_core::sys::ipod4g::{BootKind, Ipod4gBinds, Ipod4gKey, Model, System as Ipod4g};
 
 #[wasm_bindgen(start)]
 pub fn init() {
@@ -62,6 +62,7 @@ impl Ipod4gContainer {
             BootKind::HLEBoot {
                 fw_file: io::Cursor::new(fw),
             },
+            Model::from_str("4gmono"),
         )
         .map_err(|e| e.to_string())?;
         debug!("built system");

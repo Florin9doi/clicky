@@ -13,5 +13,5 @@ mod size_asserts {
     /// the stack when being constructed.
     const MAX_SYS_SIZE: usize = DEFAULT_WASM_STACK_SIZE / 4;
 
-    const_assert!(std::mem::size_of::<ipod4g::Ipod4g>() < MAX_SYS_SIZE);
+    const_assert!(std::mem::size_of::<ipod4g::System>() < MAX_SYS_SIZE);
 }

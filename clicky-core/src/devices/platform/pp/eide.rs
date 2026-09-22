@@ -88,6 +88,7 @@ impl Device for EIDECon {
             0x014 => "IDE1 Primary Timing 1",
             0x018 => "IDE1 Secondary Timing 0",
             0x01c => "IDE1 Secondary Timing 1",
+            0x024 => "Config Status",
             0x028 => "IDE0 Cfg",
             0x02c => "IDE1 Cfg",
 
@@ -127,6 +128,7 @@ impl Memory for EIDECon {
             0x014 => Ok(self.ide1_cfg.primary_timing[1]),
             0x018 => Ok(self.ide1_cfg.secondary_timing[0]),
             0x01c => Ok(self.ide1_cfg.secondary_timing[1]),
+            0x024 => Ok(0x70), // success x3
             0x028 => {
                 let val = *self
                     .ide0_cfg
@@ -170,6 +172,7 @@ impl Memory for EIDECon {
             0x014 => Ok(self.ide1_cfg.primary_timing[1] = val),
             0x018 => Ok(self.ide1_cfg.secondary_timing[0] = val),
             0x01c => Ok(self.ide1_cfg.secondary_timing[1] = val),
+            0x024 => Err(StubWrite(Trace, ())),
             0x028 => Err(StubWrite(Debug, self.ide0_cfg.config = val)),
             0x02c => Err(Unimplemented),
 

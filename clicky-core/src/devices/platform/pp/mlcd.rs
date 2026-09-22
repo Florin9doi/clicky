@@ -100,6 +100,7 @@ impl Memory for MonoLcdBridge {
             }
             Some(hi) => (hi as u16) << 8 | (val as u16),
         };
+        {trace!(target: "LCD", "write_data cmd:{:x} val:0x{:x}", offset, val);}
 
         match offset {
             0x8 => self.panel.write_command(val),

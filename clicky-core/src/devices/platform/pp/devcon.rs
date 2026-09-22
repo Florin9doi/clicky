@@ -78,12 +78,14 @@ impl Device for DevCon {
 impl Memory for DevCon {
     fn r32(&mut self, offset: u32) -> MemResult<u32> {
         match offset {
+            0x00 => Ok(self.enable[0]),
             0x04 => Err(StubRead(Error, self.reset[0])),
             0x08 => Err(StubRead(Error, self.reset[1])),
             0x0c => Ok(self.enable[0]),
             0x10 => Ok(self.enable[1]),
             0x20 => Ok(self.clock_source),
             0x2c => Err(StubRead(Error, 0)),
+            0x30 => Err(StubRead(Error, self.reset[0])),
             0x34 => Ok(self.pll_control),
             0x38 => Err(StubRead(Error, 0)),
             0x3c => Ok(self.pll_status
@@ -99,17 +101,26 @@ impl Memory for DevCon {
 
     fn w32(&mut self, offset: u32, val: u32) -> MemResult<()> {
         match offset {
+            0x00 => Err(StubWrite(Error, {
+                 self.enable[0] = val;
+            })),
             0x04 => Err(StubWrite(Error, {
                 self.reset[0] = val;
-                if val & DEV_SYSTEM != 0 {
-                    self.reset_requested.store(true, Ordering::SeqCst);
-                }
+                // TODO:
+                // if val & DEV_SYSTEM != 0 {
+                //     self.reset_requested.store(true, Ordering::SeqCst);
+                // }
             })),
             0x08 => Err(StubWrite(Error, self.reset[1] = val)),
             0x0c => Err(StubWrite(Info, self.enable[0] = val)),
             0x10 => Err(StubWrite(Info, self.enable[1] = val)),
+            0x18 => Err(StubWrite(Trace, ())),
+            0x1c => Err(StubWrite(Trace, ())),
             0x20 => Err(StubWrite(Trace, self.clock_source = val)),
             0x2c => Err(StubWrite(Trace, ())),
+            0x30 => Err(StubWrite(Error, {
+                self.reset[0] = val;
+            })),
             0x34 => Err(StubWrite(Trace, self.pll_control = val)),
             0x38 => Err(StubWrite(Error, ())),
             0x3c => Err(StubWrite(Trace, self.pll_status = val)),

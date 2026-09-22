@@ -249,7 +249,7 @@ impl Memory for MemConImpl {
             0x0000..=0x1fff => Err(StubRead(Error, self.cache_data[offset as usize])),
             0x2000..=0x3fff => Err(Unimplemented),
             0x4000..=0x5fff => Err(StubRead(
-                Error,
+                Trace,
                 self.cache_status[(offset - 0x4000) as usize],
             )),
             0x6000..=0x7fff => Err(Unimplemented),
@@ -299,9 +299,9 @@ impl Memory for MemConImpl {
                 self.cache_status[(offset - 0x4000) as usize] = val,
             )),
             0x6000..=0x7fff => Err(Unimplemented),
-            0x8000..=0x9fff => Err(StubWrite(Info, ())),
+            0x8000..=0x9fff => Err(StubWrite(Trace, ())),
             0xa000..=0xbfff => Err(StubWrite(Info, ())),
-            0xc000..=0xdfff => Err(StubWrite(Info, ())),
+            0xc000..=0xdfff => Err(StubWrite(Trace, ())),
             0xf000..=0xf03f if offset & 4 == 0 => {
                 let no = (offset - 0xf000) / 8;
                 self.mmap[no as usize].logical = val;

@@ -15,7 +15,7 @@ use crate::devices::Device;
 use crate::error::*;
 use crate::memory::{MemAccessKind, Memory};
 
-use super::{BlockMode, CpuId, Ipod4g};
+use super::{BlockMode, CpuId, System};
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub enum Event {
@@ -25,7 +25,7 @@ pub enum Event {
 }
 
 pub struct Ipod4gGdb {
-    sys: Ipod4g,
+    sys: System,
 
     watchpoints: Vec<u32>,
     watchpoint_kinds: HashMap<u32, MemAccessKind>,
@@ -35,7 +35,7 @@ pub struct Ipod4gGdb {
 }
 
 impl Ipod4gGdb {
-    pub fn new(sys: Ipod4g) -> Ipod4gGdb {
+    pub fn new(sys: System) -> Ipod4gGdb {
         Ipod4gGdb {
             sys,
             watchpoints: Vec::new(),
@@ -45,11 +45,11 @@ impl Ipod4gGdb {
         }
     }
 
-    pub fn sys_ref(&self) -> &Ipod4g {
+    pub fn sys_ref(&self) -> &System {
         &self.sys
     }
 
-    pub fn sys_mut(&mut self) -> &mut Ipod4g {
+    pub fn sys_mut(&mut self) -> &mut System {
         &mut self.sys
     }
 
@@ -313,11 +313,7 @@ impl MultiThreadOps for Ipod4gGdb {
     }
 
     fn read_addrs(&mut self, start_addr: u32, data: &mut [u8], tid: Tid) -> TargetResult<(), Self> {
-        self.sys.devices.cpuid.set_cpuid(tid_to_cpuid(tid).unwrap());
-        self.sys
-            .devices
-            .memcon
-            .set_cpuid(tid_to_cpuid(tid).unwrap());
+        self.sys.devices.set_cpuid(tid_to_cpuid(tid).unwrap());
 
         for (addr, val) in (start_addr..).zip(data.iter_mut()) {
             // TODO: throw a fatal error when accessing non-RAM devices?
@@ -327,11 +323,7 @@ impl MultiThreadOps for Ipod4gGdb {
     }
 
     fn write_addrs(&mut self, start_addr: u32, data: &[u8], tid: Tid) -> TargetResult<(), Self> {
-        self.sys.devices.cpuid.set_cpuid(tid_to_cpuid(tid).unwrap());
-        self.sys
-            .devices
-            .memcon
-            .set_cpuid(tid_to_cpuid(tid).unwrap());
+        self.sys.devices.set_cpuid(tid_to_cpuid(tid).unwrap());
 
         for (addr, val) in (start_addr..).zip(data.iter().copied()) {
             // TODO: throw a fatal error when accessing non-RAM devices?

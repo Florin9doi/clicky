@@ -6,7 +6,7 @@ use thiserror::Error;
 
 use crate::memory::Memory;
 
-use super::Ipod4g;
+use super::System;
 
 mod firmware;
 mod sysinfo;
@@ -27,10 +27,10 @@ pub enum HleBootloaderError {
 
 /// Put the system into a state as though the bootloader in Flash ROM was run.
 pub(super) fn run_hle_bootloader(
-    ipod: &mut Ipod4g,
+    ipod: &mut System,
     mut fw_file: impl Read + Seek,
 ) -> Result<(), HleBootloaderError> {
-    if !ipod.devices.flash.is_hle() {
+    if !ipod.devices.flash().is_hle() {
         warn!("Running HLE bootloader even though the system is using a real Flash ROM dump!");
     }
 
@@ -53,7 +53,7 @@ pub(super) fn run_hle_bootloader(
     let mut os_image_data = vec![0; os_image.len as usize];
     fw_file.read_exact(&mut os_image_data)?;
 
-    ipod.devices.sdram.bulk_write(0, &os_image_data);
+    ipod.devices.sdram().bulk_write(0, &os_image_data);
 
     // set the CPU to start execution from the image entry address
     ipod.cpu.reg_set(
@@ -72,7 +72,7 @@ pub(super) fn run_hle_bootloader(
     const SYSINFO_PTR: u32 = 0x4001_7f1c;
     const SYSINFO_LOC: u32 = 0x4000_ff18;
     ipod.devices.w32(SYSINFO_PTR, SYSINFO_LOC).unwrap(); // pointer to sysinfo
-    ipod.devices.fastram.bulk_write(
+    ipod.devices.fastram().bulk_write(
         SYSINFO_LOC - 0x4000_0000,
         // FIXME?: this will break on big-endian systems
         bytemuck::bytes_of(&sysinfo_t {
@@ -85,7 +85,7 @@ pub(super) fn run_hle_bootloader(
 
     // The bootloader enables the GPIOA:5 pin (i.e: the Hold button)
     ipod.devices
-        .gpio_abcd
+        .gpio_abcd()
         .lock()
         .unwrap()
         .w32(0x00, 0x32) // 0x12 -> display detection

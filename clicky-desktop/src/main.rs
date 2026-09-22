@@ -11,7 +11,7 @@ use structopt::StructOpt;
 
 use clicky_core::block::{self, BlockDev};
 use clicky_core::gui::TakeControls;
-use clicky_core::sys::ipod4g::{BootKind, Ipod4g, Ipod4gGdb, Ipod4gKey, Model};
+use clicky_core::sys::ipod4g::{BootKind, Ipod4gGdb, Ipod4gKey, Model, System as Ipod4g};
 
 mod backends;
 mod blockcfg;
@@ -105,8 +105,8 @@ fn main() -> DynResult<()> {
     pretty_env_logger::formatted_builder()
         .filter(None, log::LevelFilter::Error)
         .filter(Some("clicky"), log::LevelFilter::Trace)
-        .filter(Some("MMIO"), log::LevelFilter::Error)
-        .filter(Some("I2C"), log::LevelFilter::Error)
+        .filter(Some("MMIO"), log::LevelFilter::Debug)
+        .filter(Some("I2C"), log::LevelFilter::Debug)
         .filter(Some("LCD"), log::LevelFilter::Debug)
         // .filter(Some("FLS"), log::LevelFilter::Trace)
         .filter(Some("armv4t_emu"), log::LevelFilter::Debug)
