@@ -22,18 +22,22 @@ impl FirmwareMeta {
             return Err(HleBootloaderError::BadMagic);
         }
 
-        if header.format_version != 2 && header.format_version != 3 {
-            return Err(HleBootloaderError::InvalidVersion(header.format_version));
-        }
-
         // Pull directory entries
-        fw.seek(SeekFrom::Start(header.dir_offset as u64 + 0x200))?;
+        let offset = match header.format_version {
+            2 | 3 => header.dir_offset + 0x200,
+            0 => 0x4000,
+            _ => {return Err(HleBootloaderError::InvalidVersion(header.format_version));}
+        };
+        fw.seek(SeekFrom::Start(offset as u64))?;
 
         let mut images = Vec::new();
         loop {
-            let image = ImageInfo::parse(fw)?;
+            let mut image = ImageInfo::parse(fw)?;
             if image.dev == *b"\0\0\0\0" {
                 break;
+            }
+            if header.format_version == 0 {
+                image.dev_offset -= header.dir_offset;
             }
             images.push(image)
         }
