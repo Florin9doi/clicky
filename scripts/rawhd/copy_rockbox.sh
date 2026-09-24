@@ -24,7 +24,7 @@ fi
 
 unzip -o $ROCKBOX_ZIP_PATH -d /tmp/rockbox
 
-IMG_FATPART="ipodhd.img@@$((12288 * 512))"
+IMG_FATPART="ipodhd.img@@$((61503 * 512))"
 
 mcopy -o -s -i $IMG_FATPART /tmp/rockbox/.rockbox ::
 mdir -i $IMG_FATPART
