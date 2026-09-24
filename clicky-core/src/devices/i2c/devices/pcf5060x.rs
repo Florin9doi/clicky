@@ -221,7 +221,10 @@ struct Pcf5060xImpl {
     rtc_alarm: [u8; 7],
     bvmc: u8,
     gpoc1: u8,
+    gpoc2: u8,
     gpoc3: u8,
+    gpoc4: u8,
+    gpoc5: u8,
     adcc1: u8,
     adcc2: u8,
     acdc1: u8,
@@ -245,7 +248,10 @@ impl Pcf5060xImpl {
             rtc_alarm: [0; 7],
             bvmc: 0,
             gpoc1: 0x04,
+            gpoc2: 0,
             gpoc3: 0,
+            gpoc4: 0,
+            gpoc5: 0,
             adcc1: 0,
             adcc2: 0,
             acdc1: 0,
@@ -362,7 +368,10 @@ impl Pcf5060xImpl {
             // Battery Voltage Monitor (BVM)
             BVMC___ => Ok(self.bvmc),
             GPOC1__ => Ok(self.gpoc1),
+            GPOC2__ => Ok(self.gpoc2),
             GPOC3__ => Ok(self.gpoc3),
+            GPOC4__ => Ok(self.gpoc4),
+            GPOC5__ => Ok(self.gpoc5),
             _ => Err(Unimplemented),
         }
     }
@@ -416,7 +425,10 @@ impl Pcf5060xImpl {
             // Battery Voltage Monitor (BVM)
             BVMC___ => Ok(self.bvmc = data),
             GPOC1__ => Ok(self.gpoc1 = data),
+            GPOC2__ => Ok(self.gpoc2 = data),
             GPOC3__ => Ok(self.gpoc3 = data),
+            GPOC4__ => Ok(self.gpoc4 = data),
+            GPOC5__ => Ok(self.gpoc5 = data),
             // DC/DC and LDO control
             DCDEC1_ => Ok(self.dcdec1 = data),
             DCUDC1_ => Ok(self.dcudc1 = data),
