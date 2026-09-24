@@ -79,6 +79,7 @@ impl Device for Flash {
 
 impl Memory for Flash {
     fn r8(&mut self, offset: u32) -> MemResult<u8> {
+        {debug!(target: "FLS", "r8 offset:{:x} ", offset);}
         if offset > 0xFFFFF {
             return Err(Unexpected);
         }
@@ -94,6 +95,7 @@ impl Memory for Flash {
     }
 
     fn r16(&mut self, offset: u32) -> MemResult<u16> {
+        {debug!(target: "FLS", "r16 offset:{:x} ", offset);}
         if offset > 0xFFFFF {
             return Err(Unexpected);
         }
@@ -116,6 +118,7 @@ impl Memory for Flash {
     }
 
     fn r32(&mut self, offset: u32) -> MemResult<u32> {
+        {debug!(target: "FLS", "r32 offset:{:x} ", offset);}
         if offset > 0xFFFFF {
             return Err(Unexpected);
         }
@@ -130,10 +133,12 @@ impl Memory for Flash {
     }
 
     fn w8(&mut self, _offset: u32, _val: u8) -> MemResult<()> {
+        {trace!(target: "FLS", "w8 offset:{:x} val:0x{:x}", _offset, _val);}
         Err(Unimplemented)
     }
 
     fn w16(&mut self, offset: u32, val: u16) -> MemResult<()> {
+        {trace!(target: "FLS", "w16 offset:{:x} val:0x{:x}", offset, val);}
         // Simplified CFI state machine
         match (offset, val & 0xFF, self.state) {
             (0xAAAA, 0xAA, CFIState::ReadArrayMode) => {
@@ -162,6 +167,7 @@ impl Memory for Flash {
     }
 
     fn w32(&mut self, _offset: u32, _val: u32) -> MemResult<()> {
+        {trace!(target: "FLS", "w32 offset:{:x} val:0x{:x}", _offset, _val);}
         Err(Unimplemented)
     }
 }
