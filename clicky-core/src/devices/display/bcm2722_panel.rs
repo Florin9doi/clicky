@@ -55,12 +55,16 @@ impl Bcm2722Panel {
         let idx = {
             let x = ireg.hsa + ireg.cur_x;
             let y = ireg.vsa + ireg.cur_y;
+            // if x > 310 && y > 235 {trace!(target: "LCD", "write_ram x:{:4} y:{:4}", x, y);}
             y * MAX_WIDTH + x
         };
         if idx + 1 < GRAM_LEN {
             let mut gram = self.gram.write().unwrap();
             gram[idx    ] =  val        as u16;
             gram[idx + 1] = (val >> 16) as u16;
+        } else {
+            ireg.cur_x = ireg.hsa;
+            ireg.cur_y = ireg.vsa;
         }
         Bcm2722Panel::advance(&mut ireg);
     }
@@ -84,6 +88,14 @@ impl Bcm2722Panel {
 }
 
 impl LcdPanel for Bcm2722Panel {
+
+    fn read_data32(&mut self) -> MemResult<u32> {
+        Ok(1)
+    }
+    fn read_command32(&mut self) -> MemResult<u32> {
+        Ok(1)
+    }
+
     fn write_command32(&mut self, val: u32) -> MemResult<()> {
         let mut ireg = self.ireg.write().unwrap();
         Ok(ireg.cmd = val)
@@ -91,18 +103,29 @@ impl LcdPanel for Bcm2722Panel {
 
     fn write_data32(&mut self, val: u32) -> MemResult<()> {
         let mut ireg = self.ireg.write().unwrap();
-        let index = (ireg.cmd >> 1) - 0x7_0000;
+        let index = (ireg.cmd >> 2) - 0x3_8000;
 
+        // match ireg.cmd {
+        //     0xe0000 => {}
+        //     0x62 => {}
+        //     _ => {trace!(target: "LCD", "write_data ireg:{:x}/{:x} val:0x{:x}({})", ireg.cmd, index, val, val);}
+        // }
+        // match index {
+        //     8 ..= 76800 => {}
+        //     0..=7 | _ => {trace!(target: "LCD", "write_data cmd:{:x}/{:x} val:0x{:x}({})", ireg.cmd, index, val, val);}
+        // }
         match index {
-            2..=14 => {trace!(target: "LCD", "write_data cmd:{:x} val:0x{:x}({})", ireg.cmd, val, val);}
-            _ => {}
-        }
-        match index {
-            2 => ireg.hsa = val as usize,
-            4 => ireg.vsa = val as usize,
-            6 => ireg.hea = val as usize,
-            8 => ireg.vea = val as usize,
-            0 | 22 ..= 0x25810 => { // 16 .. (16 + 320x240x2)
+            1 => {
+                ireg.hsa = val as usize;
+                ireg.cur_x = 0;
+            }
+            2 => {
+                ireg.vsa = val as usize;
+                ireg.cur_y = 0;
+            }
+            3 => ireg.hea = val as usize,
+            4 => ireg.vea = val as usize,
+            0 | 8 ..= 176808 => { // 8 .. (8 + 320x240x2)
                 drop(ireg);
                 self.write_ram(val);
             }

@@ -14,6 +14,7 @@ pub struct Bcm2722 {
     write_addr_latch: Option<u16>,
     read_latch: Option<u16>,
     read_latch_hi: Option<u32>,
+    addr: u32,
 
     panel: Box<dyn LcdPanel>,
 }
@@ -24,6 +25,7 @@ impl Bcm2722 {
             write_addr_latch: None,
             read_latch: None,
             read_latch_hi: None,
+            addr: 0,
             panel,
         }
     }
@@ -80,8 +82,20 @@ impl Memory for Bcm2722 {
         Ok(val as u16)
     }
 
-    fn r32(&mut self, _offset: u32) -> MemResult<u32> {
-        Err(StubRead(Error, 0))
+    fn r32(&mut self, offset: u32) -> MemResult<u32> {
+        let val = match offset {
+            DATA => {
+                match self.panel.read_data32() {
+                    Ok(v) => v,
+                    Err(_) => 0,
+                }
+            }
+            STATUS => 0x0013,
+            WRITE_ADDR | READ_ADDR | 0x40000 | 0x50000 | READY => 0x0001,
+            HANDSHAKE => 0x0040,
+            _ => 0x0000,
+        };
+        Ok(val)
     }
 
     fn w16(&mut self, offset: u32, val: u16) -> MemResult<()> {
@@ -99,6 +113,7 @@ impl Memory for Bcm2722 {
     fn w32(&mut self, offset: u32, val: u32) -> MemResult<()> {
         match offset {
             WRITE_ADDR => {
+                self.addr = val;
                 let _ = self.panel.write_command32(val);
                 Err(StubWrite(Trace, ()))
             }
@@ -112,7 +127,11 @@ impl Memory for Bcm2722 {
                 }
             }
             DATA | 4 | 0x40000 => {
-                self.panel.write_data32(val)
+                if (self.addr & 0xffff_0000) == 0xe0000 {
+                    self.panel.write_data32(val)
+                } else {
+                    return Ok(());
+                }
             }
             _ => Err(StubWrite(Error, ())),
         }
