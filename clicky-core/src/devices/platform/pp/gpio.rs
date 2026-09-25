@@ -2,6 +2,8 @@ use crate::devices::prelude::*;
 
 use crate::devices::util::ArcMutexDevice;
 use crate::signal::{gpio, irq};
+use std::sync::atomic::{AtomicU32, Ordering};
+use std::sync::Arc;
 
 /// 8-bit GPIO Port
 #[derive(Debug)]
@@ -9,6 +11,8 @@ struct GpioPort {
     label: &'static str,
 
     irq: irq::Sender,
+    irq_mask: Arc<AtomicU32>,
+    port_index: u8,
     inputs: [Option<gpio::Receiver>; 8],
     outputs: [Option<gpio::Sender>; 8],
 
@@ -22,11 +26,13 @@ struct GpioPort {
 }
 
 impl GpioPort {
-    fn new(irq: irq::Sender, label: &'static str) -> GpioPort {
+    fn new(irq: irq::Sender, irq_mask: Arc<AtomicU32>, port_index: u8, label: &'static str) -> GpioPort {
         GpioPort {
             label,
 
             irq,
+            irq_mask,
+            port_index,
             inputs: Default::default(),
             outputs: Default::default(),
 
@@ -104,9 +110,13 @@ impl GpioPort {
 
         // check if the IRQ line should be asserted / cleared
         if (self.interrupt_status & self.interrupt_enable) != 0 {
+            self.irq_mask.fetch_or(1 << self.port_index, Ordering::SeqCst);
             self.irq.assert()
         } else {
-            self.irq.clear()
+            self.irq_mask.fetch_and(!(1 << self.port_index), Ordering::SeqCst);
+            if self.irq_mask.load(Ordering::SeqCst) == 0 {
+                self.irq.clear()
+            }
         }
     }
 }
@@ -186,17 +196,20 @@ impl Memory for GpioPort {
 #[derive(Debug)]
 pub struct GpioBlock {
     port: [GpioPort; 4],
+    irq_mask: Arc<AtomicU32>,
 }
 
 impl GpioBlock {
     pub fn new(irq: irq::Sender, labels: [&'static str; 4]) -> GpioBlock {
+        let irq_mask = Arc::new(AtomicU32::new(0));
         GpioBlock {
             port: [
-                GpioPort::new(irq.clone(), labels[0]),
-                GpioPort::new(irq.clone(), labels[1]),
-                GpioPort::new(irq.clone(), labels[2]),
-                GpioPort::new(irq, labels[3]),
+                GpioPort::new(irq.clone(), irq_mask.clone(), 0, labels[0]),
+                GpioPort::new(irq.clone(), irq_mask.clone(), 1, labels[1]),
+                GpioPort::new(irq.clone(), irq_mask.clone(), 2, labels[2]),
+                GpioPort::new(irq,         irq_mask.clone(), 3, labels[3]),
             ],
+            irq_mask
         }
     }
 
