@@ -284,9 +284,9 @@ pub struct System {
     cop: Cpu,
     devices: Bus,
     controls: Option<Ipod4gControls>,
-    /// A second set of keypad signal masters, used to synthesize key presses
+    /// A second set of key sinks, used to synthesize key presses
     /// independently of whoever took ownership of the system's controls.
-    synthetic_controls: devices::Controls<signal::Master>,
+    synthetic_controls: HashMap<Ipod4gKey, controls::KeySink>,
     /// Keys to hold down once the system starts executing code.
     boot_hold: Option<Vec<Ipod4gKey>>,
 
@@ -362,7 +362,7 @@ impl System {
                 flash_rom,
             ),
             controls: None,
-            synthetic_controls: controls_tx.clone(),
+            synthetic_controls: HashMap::new(),
             boot_hold: None,
 
             irq_pending,
@@ -391,7 +391,8 @@ impl System {
                         Ipod4gKey::Right => controls_tx.right.clone(),
                         Ipod4gKey::Hold => continue, // Hold is wired separately
                     };
-                    keys.insert(key, controls::KeySink::ClickWheel(master));
+                    keys.insert(key, controls::KeySink::ClickWheel(master.clone()));
+                    sys.synthetic_controls.insert(key, controls::KeySink::ClickWheel(master));
                 }
                 KeyRoute::Gpio(block, pin, sticky, active) => {
                     let (mut key_tx, key_rx) = gpio::new(gpio_changed.clone(), controls::key_label(key));
@@ -399,7 +400,13 @@ impl System {
                         gpio_block.lock().unwrap().register_in(pin as usize, key_rx);
                     }
                     if active == KeyActive::Low { key_tx.set_high(); }
-                    keys.insert(key, controls::KeySink::Gpio(key_tx, sticky == KeySticky::True, active == KeyActive::High));
+                    let sink = controls::KeySink::Gpio(
+                        key_tx,
+                        sticky == KeySticky::True,
+                        active == KeyActive::High,
+                    );
+                    keys.insert(key, sink.clone());
+                    sys.synthetic_controls.insert(key, sink);
                 }
             }
         }
@@ -477,22 +484,24 @@ impl System {
         }
 
         if let Some(keys) = self.boot_hold.take() {
-            let mut signals = keys
+            let mut sinks = keys
                 .iter()
-                .filter_map(|key| controls::key_signal(&self.synthetic_controls, *key))
+                .filter_map(|key| self.synthetic_controls.get(key).cloned())
                 .collect::<Vec<_>>();
 
             self.executor
                 .spawner()
                 .spawn(async move {
-                    for signal in signals.iter_mut() {
-                        signal.assert()
+                    for sink in sinks.iter_mut() {
+                        sink.set(true);
                     }
 
                     Timeout::new(BOOT_HOLD_DURATION).await;
 
-                    for signal in signals.iter_mut() {
-                        signal.clear()
+                    for sink in sinks.iter_mut() {
+                        if !sink.is_sticky() {
+                            sink.set(false);
+                        }
                     }
                 })
                 .expect("failed to spawn boot-hold task");

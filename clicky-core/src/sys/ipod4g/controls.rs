@@ -3,7 +3,6 @@ use super::{Ipod4gControls, System};
 use std::collections::HashMap;
 use std::str::FromStr;
 
-use crate::devices::platform::pp::Controls;
 use crate::gui::{ButtonCallback, ScrollCallback, TakeControls};
 use crate::signal::{self, gpio};
 
@@ -28,14 +27,18 @@ pub(super) fn key_label(key: Ipod4gKey) -> &'static str {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub(super) enum KeySink {
     ClickWheel(signal::Master),
     Gpio(gpio::Sender, bool, bool),
 }
 
 impl KeySink {
-    fn set(&mut self, pressed: bool) {
+    pub(super) fn is_sticky(&self) -> bool {
+        matches!(self, KeySink::Gpio(_, true, _))
+    }
+
+    pub(super) fn set(&mut self, pressed: bool) {
         match self {
             KeySink::ClickWheel(signal) => {
                 if pressed {
@@ -126,8 +129,6 @@ impl TakeControls for System {
 impl FromStr for Ipod4gKey {
     type Err = String;
 
-    // NOTE: the Hold switch is a latching, active-low GPIO rather than a keypad
-    // signal, so it isn't one of the keys that can be parsed here.
     fn from_str(s: &str) -> Result<Ipod4gKey, String> {
         match s.trim().to_ascii_lowercase().as_str() {
             "up" => Ok(Ipod4gKey::Up),
@@ -135,27 +136,11 @@ impl FromStr for Ipod4gKey {
             "left" => Ok(Ipod4gKey::Left),
             "right" => Ok(Ipod4gKey::Right),
             "action" => Ok(Ipod4gKey::Action),
+            "hold" => Ok(Ipod4gKey::Hold),
             _ => Err(format!(
-                "no such key: {:?} (expected one of: up, down, left, right, action)",
+                "no such key: {:?} (expected one of: up, down, left, right, action, hold)",
                 s
             )),
         }
     }
-}
-
-/// Returns a handle to the signal driven by `key`
-pub(super) fn key_signal(
-    controls: &Controls<signal::Master>,
-    key: Ipod4gKey,
-) -> Option<signal::Master> {
-    let signal = match key {
-        Ipod4gKey::Up => &controls.up,
-        Ipod4gKey::Down => &controls.down,
-        Ipod4gKey::Left => &controls.left,
-        Ipod4gKey::Right => &controls.right,
-        Ipod4gKey::Action => &controls.action,
-        Ipod4gKey::Hold => return None,
-    };
-
-    Some(signal.clone())
 }
