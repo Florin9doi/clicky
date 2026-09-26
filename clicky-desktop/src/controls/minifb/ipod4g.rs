@@ -11,6 +11,7 @@ fn ipod4g_key_to_minifb(key: Ipod4gKey) -> Key {
         Ipod4gKey::Right => Key::Right,
         Ipod4gKey::Action => Key::Enter,
         Ipod4gKey::Hold => Key::H,
+        Ipod4gKey::Scroll1 | Ipod4gKey::Scroll2 => unreachable!("Scroll1/Scroll2 are not bindable keys"),
     }
 }
 

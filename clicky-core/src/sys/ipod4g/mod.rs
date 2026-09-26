@@ -100,6 +100,8 @@ const IPOD_1G_KEYMAP: &[(Ipod4gKey, KeyRoute)] = &[
     (Ipod4gKey::Left,   KeyRoute::Gpio(GpioBlockId::Abcd, 3, KeySticky::False, KeyActive::Low)),
     (Ipod4gKey::Up,     KeyRoute::Gpio(GpioBlockId::Abcd, 4, KeySticky::False, KeyActive::Low)),
     (Ipod4gKey::Hold,   KeyRoute::Gpio(GpioBlockId::Abcd, 5, KeySticky::True,  KeyActive::High)),
+    (Ipod4gKey::Scroll1, KeyRoute::Gpio(GpioBlockId::Abcd, 7, KeySticky::False, KeyActive::Low)),
+    (Ipod4gKey::Scroll2, KeyRoute::Gpio(GpioBlockId::Abcd, 6, KeySticky::False, KeyActive::Low)),
 ];
 const IPOD_3G_KEYMAP: &[(Ipod4gKey, KeyRoute)] = &[
     (Ipod4gKey::Right,  KeyRoute::Gpio(GpioBlockId::Abcd, 0, KeySticky::False, KeyActive::Low)),
@@ -108,6 +110,8 @@ const IPOD_3G_KEYMAP: &[(Ipod4gKey, KeyRoute)] = &[
     (Ipod4gKey::Left,   KeyRoute::Gpio(GpioBlockId::Abcd, 3, KeySticky::False, KeyActive::Low)),
     (Ipod4gKey::Up,     KeyRoute::Gpio(GpioBlockId::Abcd, 4, KeySticky::False, KeyActive::Low)),
     (Ipod4gKey::Hold,   KeyRoute::Gpio(GpioBlockId::Abcd, 5, KeySticky::True,  KeyActive::Low)),
+    (Ipod4gKey::Scroll1, KeyRoute::Gpio(GpioBlockId::Abcd, 7, KeySticky::False, KeyActive::Low)),
+    (Ipod4gKey::Scroll2, KeyRoute::Gpio(GpioBlockId::Abcd, 6, KeySticky::False, KeyActive::Low)),
 ];
 const IPOD_MINI1G_KEYMAP: &[(Ipod4gKey, KeyRoute)] = &[
     (Ipod4gKey::Action, KeyRoute::Gpio(GpioBlockId::Abcd, 0, KeySticky::False, KeyActive::Low)),
@@ -116,6 +120,8 @@ const IPOD_MINI1G_KEYMAP: &[(Ipod4gKey, KeyRoute)] = &[
     (Ipod4gKey::Right,  KeyRoute::Gpio(GpioBlockId::Abcd, 3, KeySticky::False, KeyActive::Low)),
     (Ipod4gKey::Left,   KeyRoute::Gpio(GpioBlockId::Abcd, 4, KeySticky::False, KeyActive::Low)),
     (Ipod4gKey::Hold,   KeyRoute::Gpio(GpioBlockId::Abcd, 5, KeySticky::True,  KeyActive::Low)),
+    (Ipod4gKey::Scroll1, KeyRoute::Gpio(GpioBlockId::Abcd, 8 + 4, KeySticky::False, KeyActive::Low)),
+    (Ipod4gKey::Scroll2, KeyRoute::Gpio(GpioBlockId::Abcd, 8 + 5, KeySticky::False, KeyActive::Low)),
 ];
 const CLICKWHEEL_KEYMAP: &[(Ipod4gKey, KeyRoute)] = &[
     (Ipod4gKey::Action, KeyRoute::ClickWheel),
@@ -375,9 +381,10 @@ impl System {
 
         sys.reset_requested = sys.devices.devcon().reset_requested();
 
-        // HID inputs
+        // buttons
         let mut keys: HashMap<Ipod4gKey, controls::KeySink> = HashMap::new();
         let mut used_clickwheel = false;
+        let mut scroll_route: HashMap<Ipod4gKey, (GpioBlockId, u8)> = HashMap::new();
         let mut hold_rx: Option<gpio::Receiver> = None;
         for &(key, route) in model.keymap {
             match route {
@@ -390,11 +397,16 @@ impl System {
                         Ipod4gKey::Left => controls_tx.left.clone(),
                         Ipod4gKey::Right => controls_tx.right.clone(),
                         Ipod4gKey::Hold => continue, // Hold is wired separately
+                        Ipod4gKey::Scroll1 | Ipod4gKey::Scroll2 => continue,
                     };
                     keys.insert(key, controls::KeySink::ClickWheel(master.clone()));
                     sys.synthetic_controls.insert(key, controls::KeySink::ClickWheel(master));
                 }
                 KeyRoute::Gpio(block, pin, sticky, active) => {
+                    if matches!(key, Ipod4gKey::Scroll1 | Ipod4gKey::Scroll2) {
+                        scroll_route.insert(key, (block, pin));
+                        continue;
+                    }
                     let (mut key_tx, key_rx) = gpio::new(gpio_changed.clone(), controls::key_label(key));
                     if key == Ipod4gKey::Hold {
                         hold_rx = Some(key_rx.clone());
@@ -416,9 +428,24 @@ impl System {
             }
         }
 
+        // wheels
         if used_clickwheel {
             if let Some(opto) = sys.devices.opto() {
                 opto.register_controls(controls_rx, hold_rx.expect("keymap must route Hold"));
+            }
+        } else if let (Some(&(block1, pin1)), Some(&(block2, pin2))) =
+            (scroll_route.get(&Ipod4gKey::Scroll1), scroll_route.get(&Ipod4gKey::Scroll2))
+        {
+            let (scroll1_tx, scroll1_rx) = gpio::new(gpio_changed.clone(), "Scroll1");
+            let (scroll2_tx, scroll2_rx) = gpio::new(gpio_changed.clone(), "Scroll2");
+            if let Some(gpio_block) = sys.devices.gpio_block(block1) {
+                gpio_block.lock().unwrap().register_in(pin1 as usize, scroll1_rx.clone());
+            }
+            if let Some(gpio_block) = sys.devices.gpio_block(block2) {
+                gpio_block.lock().unwrap().register_in(pin2 as usize, scroll2_rx.clone());
+            }
+            if let Some(scroll) = sys.devices.scroll() {
+                scroll.register_controls(controls_rx, scroll1_tx, scroll2_tx);
             }
         }
 
@@ -599,6 +626,9 @@ impl System {
         if self.i2c_changed.check_and_clear() {
             if let Some(opto) = devices.opto() {
                 opto.on_change();
+            }
+            if let Some(scroll) = devices.scroll() {
+                scroll.on_change();
             }
         }
 
@@ -801,6 +831,12 @@ impl Bus {
         }
     }
 
+    fn scroll(&mut self) -> Option<&mut devices::ScrollWheel> {
+        match self {
+            Bus::Pp5002(bus) => Some(&mut bus.scroll),
+            Bus::Pp502x(bus) => Some(&mut bus.scroll),
+        }
+    }
     fn opto(&mut self) -> Option<&mut devices::OptoWheel> {
         match self {
             Bus::Pp5002(_) => None,
