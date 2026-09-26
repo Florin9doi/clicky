@@ -27,6 +27,7 @@ mod usec_timer;
 mod pwm;
 mod cpucon_device;
 mod cpucon_5002;
+mod scroll;
 mod tsb43aa82;
 mod unk_5002_4000;
 
@@ -57,6 +58,7 @@ pub use usec_timer::*;
 pub use pwm::*;
 pub use cpucon_device::*;
 pub use cpucon_5002::*;
+pub use scroll::*;
 pub use tsb43aa82::*;
 pub use unk_5002_4000::*;
 

@@ -22,6 +22,7 @@ pub struct PP502xBus {
     pub core: PpCore,
     pub cpucon: devices::CpuCon,
 
+    pub scroll: devices::ScrollWheel,
     pub opto: devices::OptoWheel,
     pub clcd: devices::ColorLcdBridge,
     pub usb: devices::Usb,
@@ -119,6 +120,7 @@ impl PP502xBus {
             gpio_mirror_ijkl: GpioBlockAtomicMirror::new(gpio_mirror_ijkl),
             dmacon0,
             dmacon1,
+            scroll: ScrollWheel::new(),
             opto: OptoWheel::new(i2c_irq_tx),
             pwmcon: PWMCon::new(),
             usb: Usb::new(),
@@ -255,7 +257,8 @@ mmap! {
 
     DEVICES {
         0x0000_0000..=0x000f_ffff => flash,
-        0x3000_0000..=0x3007_ffff => bcm_video,
+        0x3000_0000..=0x3007_ffff => bcm_video, // 5g normal mode
+        0xb000_0000..=0xb007_ffff => bcm_video, // 5g diag mode
         0x6000_0000..=0x6000_0fff => cpuid,
         0x6000_1000..=0x6000_102f => mailbox,
         0x6000_4000..=0x6000_41ff => intcon,

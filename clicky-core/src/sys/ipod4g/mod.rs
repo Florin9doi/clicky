@@ -376,7 +376,7 @@ impl System {
 
         sys.reset_requested = sys.devices.devcon().reset_requested();
 
-        // HID inputs
+        // buttons
         let mut keys: HashMap<Ipod4gKey, controls::KeySink> = HashMap::new();
         let mut used_clickwheel = false;
         for &(key, route) in model.keymap {
@@ -411,9 +411,32 @@ impl System {
             }
         }
 
+        // wheels
         if used_clickwheel {
             if let Some(opto) = sys.devices.opto() {
                 opto.register_controls(controls_rx, hold_rx);
+            }
+        } else if model.alias == "1g" || model.alias == "3g" {
+            let (scroll1_tx, scroll1_rx) = gpio::new(gpio_changed.clone(), "Scroll1");
+            let (scroll2_tx, scroll2_rx) = gpio::new(gpio_changed.clone(), "Scroll2");
+            {
+                let mut gpio_abcd = sys.devices.gpio_abcd().lock().unwrap();
+                gpio_abcd.register_in(6, scroll1_rx.clone());
+                gpio_abcd.register_in(7, scroll2_rx.clone());
+            }
+            if let Some(scroll) = sys.devices.scroll() {
+                scroll.register_controls(controls_rx, scroll1_tx, scroll2_tx);
+            }
+        } else if model.alias == "mini1g" {
+            let (scroll1_tx, scroll1_rx) = gpio::new(gpio_changed.clone(), "Scroll1");
+            let (scroll2_tx, scroll2_rx) = gpio::new(gpio_changed.clone(), "Scroll2");
+            {
+                let mut gpio_abcd = sys.devices.gpio_abcd().lock().unwrap();
+                gpio_abcd.register_in(8 + 4, scroll1_rx.clone());
+                gpio_abcd.register_in(8 + 5, scroll2_rx.clone());
+            }
+            if let Some(scroll) = sys.devices.scroll() {
+                scroll.register_controls(controls_rx, scroll1_tx, scroll2_tx);
             }
         }
 
@@ -594,6 +617,9 @@ impl System {
         if self.i2c_changed.check_and_clear() {
             if let Some(opto) = devices.opto() {
                 opto.on_change();
+            }
+            if let Some(scroll) = devices.scroll() {
+                scroll.on_change();
             }
         }
 
@@ -796,6 +822,12 @@ impl Bus {
         }
     }
 
+    fn scroll(&mut self) -> Option<&mut devices::ScrollWheel> {
+        match self {
+            Bus::Pp5002(bus) => Some(&mut bus.scroll),
+            Bus::Pp502x(bus) => Some(&mut bus.scroll),
+        }
+    }
     fn opto(&mut self) -> Option<&mut devices::OptoWheel> {
         match self {
             Bus::Pp5002(_) => None,
