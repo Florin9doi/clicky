@@ -462,6 +462,24 @@ impl System {
             charger_tx.set_high();
         }
 
+        // display version
+        if model.alias == "4gcolor" {
+            // ipod photo
+            // hwid = 0x60000, gpio ignored -> photo (early) display
+            // ipod color
+            // hwid = 0x60014, check gpio:
+                                    // 0x00 -> photo (early) display
+                                    // 0x02 -> photo (early) display
+                                    // 0x10 -> hd.89
+                                    // 0x12 -> 4rd display? hd.89-like
+            // ipod nano -> hd.89
+            let (mut gpio_tx, gpio_rx) = gpio::new(gpio_changed.clone(), "Display");
+            let mut gpio_abcd = sys.devices.gpio_abcd().lock().unwrap();
+            // gpio_abcd.register_in(1, gpio_rx.clone()); // 0x02
+            gpio_abcd.register_in(4, gpio_rx.clone()); // 0x10
+            gpio_tx.set_high();
+        }
+
         // sandbox
         {
             // let (mut charger_tx, charger_rx) = gpio::new(gpio_changed.clone(), "Sandbox");
