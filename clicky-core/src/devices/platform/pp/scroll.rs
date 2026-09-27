@@ -1,11 +1,13 @@
+use std::sync::mpsc::{self, Sender};
+use std::thread;
+use std::time::Duration;
 use crate::devices::platform::pp::Controls;
 use crate::signal::{self, gpio};
 
 #[derive(Debug)]
 pub struct ScrollWheel {
     controls: Option<Controls<signal::Slave>>,
-    pin1: Option<gpio::Sender>,
-    pin2: Option<gpio::Sender>,
+    pending: Option<Sender<u8>>,
     last_val: u8,
     phase: u8,
 }
@@ -14,8 +16,7 @@ impl ScrollWheel {
     pub fn new() -> ScrollWheel {
         ScrollWheel {
             controls: None,
-            pin1: None,
-            pin2: None,
+            pending: None,
             last_val: 0,
             phase: 0,
         }
@@ -24,12 +25,30 @@ impl ScrollWheel {
     pub fn register_controls(
         &mut self,
         controls: Controls<signal::Slave>,
-        pin1: gpio::Sender,
-        pin2: gpio::Sender,
+        mut pin1: gpio::Sender,
+        mut pin2: gpio::Sender,
     ) {
         self.controls = Some(controls);
-        self.pin1 = Some(pin1);
-        self.pin2 = Some(pin2);
+        let (tx, rx) = mpsc::channel::<u8>();
+        thread::spawn(move || {
+            while let Ok(state) = rx.recv() {
+                if state & 1 != 0 {
+                    pin1.set_high();
+                } else {
+                    pin1.set_low();
+                }
+
+                if state & 2 != 0 {
+                    pin2.set_high();
+                } else {
+                    pin2.set_low();
+                }
+
+                thread::sleep(Duration::from_millis(2));
+            }
+        });
+
+        self.pending = Some(tx);
     }
 
     pub fn on_change(&mut self) {
@@ -39,46 +58,39 @@ impl ScrollWheel {
             }
             None => return,
         };
-        let pin1 = match self.pin1.as_mut() {
-            Some(pin) => pin,
-            None => return,
-        };
-
-        let pin2 = match self.pin2.as_mut() {
-            Some(pin) => pin,
-            None => return,
-        };
 
         const WHEEL_RANGE: i32 = 96;
         const HALF_RANGE: i32 = WHEEL_RANGE / 2;
+        const STATES: [u8; 4] = [0, 1, 3, 2];
 
         let delta = (val as i32 - self.last_val as i32 + HALF_RANGE)
             .rem_euclid(WHEEL_RANGE)
             - HALF_RANGE;
 
-        if delta > 0 {
-            self.phase = (self.phase + 1) & 3;
-        } else if delta < 0 {
-            self.phase = (self.phase + 3) & 3;
-        } else {
+        if delta == 0 {
             return;
         }
 
-        const STATES: [u8; 4] = [0, 1, 3, 2];
-        let state = STATES[self.phase as usize];
-
         self.last_val = val;
 
-        if state & 1 > 0 {
-            pin1.set_high();
-        } else {
-            pin1.set_low();
-        }
+        let sender = match &self.pending {
+            Some(sender) => sender,
+            None => return,
+        };
 
-        if state & 2 > 0 {
-            pin2.set_high();
-        } else {
-            pin2.set_low();
+        let steps = delta.unsigned_abs() / 4;
+
+        for _ in 0..steps {
+            if delta > 0 {
+                self.phase = (self.phase + 1) & 3;
+            } else {
+                self.phase = (self.phase + 3) & 3;
+            }
+
+            let state = STATES[self.phase as usize];
+            if sender.send(state).is_err() {
+                return;
+            }
         }
     }
 }
