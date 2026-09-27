@@ -21,6 +21,7 @@ const PP5022_FASTRAM: usize = 128 * 1024;
 pub struct PP502xBus {
     pub core: PpCore,
     pub cpucon: devices::CpuCon,
+    pub devcon: devices::DevCon,
 
     pub opto: devices::OptoWheel,
     pub clcd: devices::ColorLcdBridge,
@@ -111,6 +112,7 @@ impl PP502xBus {
         PP502xBus {
             core,
             cpucon: CpuCon::new(task_spawner.clone()),
+            devcon: DevCon::new(),
             mailbox: Mailbox::new(mbx_cpu_irq_tx, mbx_cop_irq_tx),
             clcd: ColorLcdBridge::new(model.make_panel()),
             gpio_efgh,

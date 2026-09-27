@@ -753,7 +753,7 @@ impl Bus {
         }
     }
 
-    fn devcon(&mut self) -> &mut devices::DevCon {
+    fn devcon(&mut self) -> &mut dyn devices::DevConDevice {
         match self {
             Bus::Pp5002(bus) => &mut bus.devcon,
             Bus::Pp502x(bus) => &mut bus.devcon,

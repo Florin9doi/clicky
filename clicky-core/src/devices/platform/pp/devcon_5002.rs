@@ -6,9 +6,9 @@ use crate::devices::platform::pp::DevConDevice;
 
 const DEV_SYSTEM: u32 = 1 << 2;
 
-/// PP5020 Device Controller.
+/// PP5002 Device Controller.
 #[derive(Debug)]
-pub struct DevCon {
+pub struct DevCon5002 {
     reset: [u32; 2],
     enable: [u32; 2],
     clock_source: u32,
@@ -20,9 +20,9 @@ pub struct DevCon {
     reset_requested: Arc<AtomicBool>,
 }
 
-impl DevCon {
-    pub fn new() -> DevCon {
-        DevCon {
+impl DevCon5002 {
+    pub fn new() -> DevCon5002 {
+        DevCon5002 {
             reset: [0, 0],
             enable: [0, 0],
             clock_source: 0,
@@ -43,14 +43,14 @@ impl DevCon {
     /// Restore the register state a reset leaves behind.
     pub fn reset(&mut self) {
         let flag = Arc::clone(&self.reset_requested);
-        *self = DevCon::new();
+        *self = DevCon5002::new();
         self.reset_requested = flag;
     }
 }
 
-impl Device for DevCon {
+impl Device for DevCon5002 {
     fn kind(&self) -> &'static str {
-        "DevCon"
+        "DevCon5002"
     }
 
     fn probe(&self, offset: u32) -> Probe {
@@ -76,7 +76,7 @@ impl Device for DevCon {
     }
 }
 
-impl Memory for DevCon {
+impl Memory for DevCon5002 {
     fn r32(&mut self, offset: u32) -> MemResult<u32> {
         match offset {
             0x00 => Ok(self.enable[0]),
@@ -106,10 +106,7 @@ impl Memory for DevCon {
                  self.enable[0] = val;
             })),
             0x04 => Err(StubWrite(Error, {
-                self.reset[0] = val;
-                if val & DEV_SYSTEM != 0 {
-                    self.reset_requested.store(true, Ordering::SeqCst);
-                }
+                // self.reset[0] = val;
             })),
             0x08 => Err(StubWrite(Error, self.reset[1] = val)),
             0x0c => Err(StubWrite(Info, self.enable[0] = val)),
@@ -120,6 +117,9 @@ impl Memory for DevCon {
             0x2c => Err(StubWrite(Trace, ())),
             0x30 => Err(StubWrite(Error, {
                 self.reset[0] = val;
+                if val & DEV_SYSTEM != 0 {
+                    self.reset_requested.store(true, Ordering::SeqCst);
+                }
             })),
             0x34 => Err(StubWrite(Trace, self.pll_control = val)),
             0x38 => Err(StubWrite(Error, ())),
@@ -140,7 +140,7 @@ impl Memory for DevCon {
     }
 }
 
-impl DevConDevice for DevCon {
+impl DevConDevice for DevCon5002 {
     fn reset(&mut self) { self.reset() }
     fn reset_requested(&self) -> Arc<AtomicBool> { self.reset_requested() }
 }

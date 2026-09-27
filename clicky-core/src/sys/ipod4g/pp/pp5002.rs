@@ -19,6 +19,7 @@ const FASTRAM_SIZE: usize = 96 * 1024;
 pub struct PP5002Bus {
     pub core: PpCore,
     pub cpucon: devices::CpuCon5002,
+    pub devcon: devices::DevCon5002,
     pub firewire: devices::TSB43AA82,
     pub unk4000: devices::Unk5002_4000,
 }
@@ -67,6 +68,7 @@ impl PP5002Bus {
         PP5002Bus {
             core,
             cpucon: CpuCon5002::new(),
+            devcon: DevCon5002::new(),
             firewire: TSB43AA82::new(),
             unk4000: Unk5002_4000::new(),
         }
