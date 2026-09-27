@@ -479,6 +479,12 @@ impl System {
             gpio_abcd.register_in(4, gpio_rx.clone()); // 0x10
             gpio_tx.set_high();
         }
+        if model.alias == "nano1g" {
+            let (mut gpio_tx, gpio_rx) = gpio::new(gpio_changed.clone(), "Display");
+            let mut gpio_abcd = sys.devices.gpio_abcd().lock().unwrap();
+            gpio_abcd.register_in(1, gpio_rx.clone());
+            gpio_tx.set_high();
+        }
 
         // sandbox
         {
