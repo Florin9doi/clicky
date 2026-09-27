@@ -205,8 +205,8 @@ mmap! {
         0xc000_1000..=0xc000_101f => mlcd,
         0xc000_2500..=0xc000_25ff => i2s,
         0xc000_3000..=0xc000_3fff => eidecon,
-        0xc000_6000..=0xc000_6020 => serial0,
-        0xc000_6040..=0xc000_6060 => serial1,
+        0xc000_6000..=0xc000_603f => serial0,
+        0xc000_6040..=0xc000_607f => serial1,
         0xc000_8000..=0xc000_801f => i2ccon,
         0xc000_8020..=0xc000_803f => total_mystery, // audio?
         0xc400_0000..=0xc400_000f => cpuid,
