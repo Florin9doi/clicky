@@ -18,6 +18,7 @@ struct InternalRegs {
     vea: usize,
     cur_x: usize,
     cur_y: usize,
+    mirror: bool,
 }
 
 // The unknown LCD controller used on iPod Photo
@@ -102,13 +103,20 @@ impl LcdPanel for Hd66xxx {
             _ => {}
         }
         match ireg.cmd {
+            0x10 => {
+                ireg.mirror = !val.get_bit(2);
+            }
             0x12 => {
                 ireg.vsa = val as usize;
                 ireg.cur_x = 0;
                 ireg.cur_y = 0;
             }
             0x13 => {
-                ireg.hea = val as usize;
+                if ireg.mirror {
+                    ireg.hsa = MAX_WIDTH - val as usize - 1;
+                } else {
+                    ireg.hea = val as usize;
+                }
                 ireg.cur_x = 0;
                 ireg.cur_y = 0;
             }
@@ -118,11 +126,15 @@ impl LcdPanel for Hd66xxx {
                 ireg.cur_y = 0;
             }
             0x16 => {
-                ireg.hsa = val as usize;
+                if ireg.mirror {
+                    ireg.hea = MAX_WIDTH - val as usize - 1;
+                } else {
+                    ireg.hsa = val as usize;
+                }
                 ireg.cur_x = 0;
                 ireg.cur_y = 0;
             }
-            0x01 | 0x02 | 0x10 | 0x18 | 0x7e | 0x7f | 0x80 | 0xce | 0xef => {
+            0x01 | 0x02 | 0x18 | 0x7e | 0x7f | 0x80 | 0xce | 0xef => {
             }
             invalid_cmd => {
                 return Err(Fatal(format!(
