@@ -239,7 +239,7 @@ impl Model {
         Self {
             name: "iPod Nano",
             alias: "nano1g",
-            soc: SoC::Pp5020,
+            soc: SoC::Pp5022,
             display_type: DisplayType::Hd66789,
             mirrored: false,
             width: 176,
