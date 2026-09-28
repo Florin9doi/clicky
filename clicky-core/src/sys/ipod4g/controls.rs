@@ -122,8 +122,8 @@ impl TakeControls for System {
                 let mut wheel_data = wheel_data.lock().unwrap();
                 // from rockbox button-clickwheel.c
                 // #define WHEELCLICKS_PER_ROTATION     96 /* wheelclicks per full rotation */
-                // clamp to half a rotation - 1
-                *wheel_data = (*wheel_data as i32 + (-dy * 2.0) as i32).rem_euclid(96) as u8;
+                let val = (-dy as i32).clamp(-1, 1) * 5;
+                *wheel_data = (*wheel_data as i32 + val as i32).rem_euclid(96) as u8;
             })
         });
 

@@ -78,7 +78,7 @@ impl ScrollWheel {
             None => return,
         };
 
-        let steps = delta.unsigned_abs() / 4;
+        let steps = delta.unsigned_abs();
 
         for _ in 0..steps {
             if delta > 0 {
