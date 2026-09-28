@@ -71,8 +71,10 @@ impl PpCore {
             fastram: AsanRam::new(fastram_size, true),
             cpuid: CpuIdReg::new(),
             flash: match flash_rom {
-                Some(dump) => Flash::new_with_dump(dump).expect("invalid flash dump"),
-                None => Flash::new(),
+                Some(dump) => {
+                    Flash::new_with_dump(dump, model.flash_chip).expect("invalid flash dump")
+                }
+                None => Flash::new(model.flash_chip),
             },
             timer1: CfgTimer::new("1", timer1_irq_tx, task_spawner.clone()),
             timer2: CfgTimer::new("2", timer2_irq_tx, task_spawner),

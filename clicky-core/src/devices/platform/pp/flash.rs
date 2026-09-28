@@ -11,43 +11,75 @@ enum CFIState {
     ReadStatus,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct FlashChip {
+    pub size: u32,
+    pub vendor_id: u16,
+    pub device_id: u16,
+}
+
+impl FlashChip {
+    // 3g
+    pub const LH28F800BGHB: FlashChip = FlashChip {
+        size: 1024 * 1024,
+        vendor_id: 0x00b0,
+        device_id: 0x0060,
+    };
+    // 4g / color / 5g
+    pub const SST39WF800A: FlashChip = FlashChip {
+        size: 1024 * 1024,
+        vendor_id: 0x00bf,
+        device_id: 0x273f,
+    };
+    // nano1g
+    pub const SST39WF400A: FlashChip = FlashChip {
+        size: 512 * 1024,
+        vendor_id: 0x00bf,
+        device_id: 0x272f,
+    };
+}
+
 /// Internal iPod Flash ROM. Defaults to HLE mode (where only a few critical
 /// memory locations can be read). Use the `use_dump` method if you have a dump
 /// of a real iPod's flash ROM.
 pub struct Flash {
     dump: Option<Box<[u8]>>,
     state: CFIState,
+    chip: FlashChip,
 }
 
 impl std::fmt::Debug for Flash {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("Flash")
             .field("dump", &self.dump.as_ref().map(|_| "[...]"))
+            .field("chip", &self.chip)
             .finish()
     }
 }
 
 impl Flash {
-    pub fn new() -> Flash {
+    pub fn new(chip: FlashChip) -> Flash {
         Flash {
             dump: None,
             state: CFIState::ReadArrayMode,
+            chip,
         }
     }
 
-    pub fn new_with_dump(dump: Box<[u8]>) -> Result<Flash, &'static str> {
-        if dump.len() != 0x100000 {
-            return Err("Flash ROM dump must be exactly 1MB");
+    pub fn new_with_dump(dump: Box<[u8]>, chip: FlashChip) -> Result<Flash, &'static str> {
+        if dump.len() != chip.size as usize {
+            return Err("Flash ROM dump must be exactly 512KB or 1MB");
         }
         Ok(Flash {
             dump: Some(dump),
             state: CFIState::ReadArrayMode,
+            chip,
         })
     }
 
     pub fn use_dump(&mut self, dump: Box<[u8]>) -> Result<(), &'static str> {
-        if dump.len() != 0x100000 {
-            return Err("Flash ROM dump must be exactly 1MB");
+        if dump.len() != self.chip.size as usize {
+            return Err("Flash ROM dump must be exactly 512KB or 1MB");
         }
         self.dump = Some(dump);
         Ok(())
@@ -80,7 +112,7 @@ impl Device for Flash {
     }
 
     fn probe(&self, offset: u32) -> Probe {
-        if offset > 0xFFFFF {
+        if offset >= self.chip.size {
             Probe::Unmapped
         } else {
             Probe::Register("<flash rom>")
@@ -91,7 +123,7 @@ impl Device for Flash {
 impl Memory for Flash {
     fn r8(&mut self, offset: u32) -> MemResult<u8> {
         {debug!(target: "FLS", "r8 offset:{:x} ", offset);}
-        if offset > 0xFFFFF {
+        if offset >= self.chip.size {
             return Err(Unexpected);
         }
 
@@ -107,7 +139,7 @@ impl Memory for Flash {
 
     fn r16(&mut self, offset: u32) -> MemResult<u16> {
         {debug!(target: "FLS", "r16 offset:{:x} ", offset);}
-        if offset > 0xFFFFF {
+        if offset >= self.chip.size {
             return Err(Unexpected);
         }
 
@@ -122,13 +154,8 @@ impl Memory for Flash {
                 }
                 
             }
-            // 4G / Color / 5G
-            // (CFIState::ReadSoftwareID, 0x0) => Ok(0x00BF), // Manufacturer ID (SST)
-            // (CFIState::ReadSoftwareID, 0x1) => Ok(0x273F), // Device ID (SST39WF800A)
-
-            // 1G
-            (CFIState::ReadSoftwareID, 0x0) => Ok(0x00B0), // Manufacturer ID (Sharp)
-            (CFIState::ReadSoftwareID, 0x1) => Ok(0x0060), // Device ID ()
+            (CFIState::ReadSoftwareID, 0x0) => Ok(self.chip.vendor_id),
+            (CFIState::ReadSoftwareID, 0x1) => Ok(self.chip.device_id),
             (CFIState::ReadStatus, _) => Ok(0x80),
             _ => Err(Unimplemented),
         }        
@@ -136,7 +163,7 @@ impl Memory for Flash {
 
     fn r32(&mut self, offset: u32) -> MemResult<u32> {
         {debug!(target: "FLS", "r32 offset:{:x} ", offset);}
-        if offset > 0xFFFFF {
+        if offset >= self.chip.size {
             return Err(Unexpected);
         }
 

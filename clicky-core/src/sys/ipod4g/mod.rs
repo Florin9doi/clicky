@@ -25,6 +25,7 @@ pub use gdb::Ipod4gGdb;
 use hle_bootloader::run_hle_bootloader;
 
 use crate::devices::platform::pp::common::*;
+use crate::devices::platform::pp::FlashChip;
 use crate::devices::util::{ArcMutexDevice, MemSniffer};
 mod devices {
     pub mod i2c {
@@ -142,6 +143,7 @@ pub struct Model {
     pub width: usize,
     pub height: usize,
     pub keymap: &'static [(Ipod4gKey, KeyRoute)],
+    pub flash_chip: FlashChip,
 }
 
 impl Model {
@@ -155,6 +157,7 @@ impl Model {
             width: 160,
             height: 128,
             keymap: IPOD_1G_KEYMAP,
+            flash_chip: FlashChip::LH28F800BGHB,
         },
         Self {
             name: "iPod (3rd gen)",
@@ -165,6 +168,7 @@ impl Model {
             width: 160,
             height: 128,
             keymap: IPOD_3G_KEYMAP,
+            flash_chip: FlashChip::LH28F800BGHB,
         },
         Self {
             name: "iPod (4th gen)",
@@ -175,6 +179,7 @@ impl Model {
             width: 160,
             height: 128,
             keymap: CLICKWHEEL_KEYMAP,
+            flash_chip: FlashChip::SST39WF800A,
         },
         Self {
             name: "iPod Photo (early)",
@@ -185,6 +190,7 @@ impl Model {
             width: 220,
             height: 176,
             keymap: CLICKWHEEL_KEYMAP,
+            flash_chip: FlashChip::SST39WF800A,
         },
         Self {
             name: "iPod Color (late)",
@@ -195,6 +201,7 @@ impl Model {
             width: 220,
             height: 176,
             keymap: CLICKWHEEL_KEYMAP,
+            flash_chip: FlashChip::SST39WF800A,
         },
         Self {
             name: "iPod Video",
@@ -205,6 +212,7 @@ impl Model {
             width: 320,
             height: 240,
             keymap: CLICKWHEEL_KEYMAP,
+            flash_chip: FlashChip::SST39WF800A,
         },
         Self {
             name: "iPod Mini (1st gen)",
@@ -215,6 +223,7 @@ impl Model {
             width: 138,
             height: 110,
             keymap: IPOD_MINI1G_KEYMAP,
+            flash_chip: FlashChip::SST39WF800A,
         },
         Self {
             name: "iPod Mini (2nd gen)",
@@ -225,6 +234,7 @@ impl Model {
             width: 138,
             height: 110,
             keymap: CLICKWHEEL_KEYMAP,
+            flash_chip: FlashChip::SST39WF800A,
         },
         Self {
             name: "iPod Nano",
@@ -235,6 +245,7 @@ impl Model {
             width: 176,
             height: 132,
             keymap: CLICKWHEEL_KEYMAP,
+            flash_chip: FlashChip::SST39WF400A,
         },
     ];
 
