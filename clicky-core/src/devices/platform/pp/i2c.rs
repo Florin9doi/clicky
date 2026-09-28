@@ -85,8 +85,6 @@ impl I2CTransactionCfg {
             len: (self.len).ok_or_else(|| Fatal("did not specify len".into()))?,
         };
 
-        *self = I2CTransactionCfg::default();
-
         Ok(res)
     }
 }
