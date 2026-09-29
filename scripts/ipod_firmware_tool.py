@@ -544,6 +544,11 @@ class FirmwareImage:
         diroffset = dir_ptr + DIR_POINTER_ADDEND
         version = struct.unpack_from("<H", buf, base + DIR_VERSION_OFFSET)[0]
 
+        firmware_offset = 0
+        if version == 0:
+            diroffset = 0x4000
+            firmware_offset = dir_ptr
+
         images: list[FirmwareImageEntry] = []
         pos = base + diroffset
         while pos + DIR_ENTRY_SIZE <= len(buf) and len(images) < 10:
@@ -557,7 +562,7 @@ class FirmwareImage:
                 break
 
             id_        = struct.unpack_from("<I", buf, fields_off + 0x04)[0]
-            dev_offset = struct.unpack_from("<I", buf, fields_off + 0x08)[0]
+            dev_offset = (struct.unpack_from("<I", buf, fields_off + 0x08)[0]) - firmware_offset
             length     = struct.unpack_from("<I", buf, fields_off + 0x0c)[0]
             addr       = struct.unpack_from("<I", buf, fields_off + 0x10)[0]
             entry_off  = struct.unpack_from("<I", buf, fields_off + 0x14)[0]
@@ -585,10 +590,10 @@ class FirmwareImage:
         if not images:
             raise ValueError("firmware header found, but no valid directory entries after it")
 
-        if len(images) > 1 and version == 2:
-            fwoffset = base
-        else:
+        if len(images) > 1 and version == 3:
             fwoffset = base + SECTOR_SIZE
+        else:
+            fwoffset = base
 
         fw = cls(buf=buf, partition_base=base, fwoffset=fwoffset,
                  version=version, images=images)
