@@ -72,6 +72,37 @@ mod reg {
     pub const LOG_ROM_DATA:     u32 = 0xFC;
 }
 
+mod int {
+    pub const INT        : usize = 31;
+    pub const PH_INT     : usize = 30;
+    pub const BRESET     : usize = 29;
+    pub const CMD_SLF    : usize = 28;
+    pub const ENDSLF     : usize = 27;
+    pub const PHYPKT     : usize = 26;
+    pub const SNT_RJ     : usize = 23;
+    pub const PH_RRX     : usize = 22;
+    pub const IF_ACC     : usize = 21;
+    pub const HDR_ERR    : usize = 20;
+    pub const TC_ERR     : usize = 19;
+    pub const CYSEC      : usize = 18;
+    pub const CYST       : usize = 17;
+    pub const DRH_UPDATE : usize = 15;
+    pub const FA_GAP     : usize = 14;
+    pub const TX_RDY     : usize = 13;
+    pub const CY_DNE     : usize = 12;
+    pub const CY_PND     : usize = 11;
+    pub const CY_LST     : usize = 10;
+    pub const CY_ARB_F   : usize =  9;
+    pub const ATF_END    : usize =  7;
+    pub const ARF_RXD    : usize =  6;
+    pub const M_OR_END   : usize =  5;
+    pub const COR_END    : usize =  4;
+    pub const DTF_END    : usize =  3;
+    pub const DRF_END    : usize =  2;
+    pub const TX_EXPR    : usize =  1;
+    pub const AGNT_WR    : usize =  0;
+}
+
 mod phy {
     type Range = std::ops::RangeInclusive<usize>;
     pub const RD_PY       : usize = 31;
@@ -153,6 +184,7 @@ impl TSB43AA82 {
                     {debug!(target: "FW", "  PHY write : reg:{:8x} val:{:8x}", phy_rg_ad, phy_rg_data);}
                     if phy_rg_ad == 1 && (phy_rg_data & 0x40) == 0x40 {
                         {debug!(target: "FW", "Phy1 - IBR=1 - Initiate bus reset");}
+                        self.int_event |= 1 << int::ENDSLF;
                     }
                 }
                 // read
@@ -164,7 +196,7 @@ impl TSB43AA82 {
                     self.phyaccess.set_bits(phy::PHY_RX_AD, phy_rg_ad);
                     self.phyaccess.set_bits(phy::PHY_RX_DATA, data);
                     {debug!(target: "FW", "  PHY read  : reg:{:8x} val:{:8x} phyacc:{:x}", phy_rg_ad, data, self.phyaccess);}
-                    self.int_event |= 0xffff_0000;
+                    self.int_event |= 1 << int::PH_RRX;
                 }
             }
             _ => {},
