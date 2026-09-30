@@ -8,7 +8,6 @@ pub use super::common::CpuId;
 
 #[allow(dead_code)]
 mod flags {
-    type Range = std::ops::RangeInclusive<usize>;
     pub const CPU_SLEEP: usize = 15;
     pub const COP_SLEEP: usize = 14;
 }
