@@ -1,126 +1,174 @@
+#![allow(unused_imports)]
+#![allow(unused_variables)]
+#![allow(dead_code)]
+#![allow(unused_mut)]
+#![allow(unused_assignments)]
+
 use crate::devices::prelude::*;
 
 mod reg {
-    pub const AT_RETRIES: u32 = 0x008;
-    pub const HC_CONTROL_SET: u32 = 0x050;
-    pub const HC_CONTROL_CLEAR: u32 = 0x054;
-    pub const SELF_ID_BUFFER: u32 = 0x064;
-    pub const INT_EVENT_SET: u32 = 0x080;
-    pub const INT_EVENT_CLEAR: u32 = 0x084;
-    pub const INT_MASK_SET: u32 = 0x088;
-    pub const INT_MASK_CLEAR: u32 = 0x08c;
-    pub const FAIRNESS_CONTROL: u32 = 0x0dc;
-    pub const LINK_CONTROL_SET: u32 = 0x0e0;
-    pub const LINK_CONTROL_CLEAR: u32 = 0x0e4;
-    pub const PHY_CONTROL: u32 = 0x0ec;
-    pub const AS_REQ_FILTER_HI_SET: u32 = 0x100;
-    pub const AS_REQ_FILTER_LO_SET: u32 = 0x108;
-
-    /// Async DMA contexts. Each is a 0x20-byte block: ContextControlSet at
-    /// +0x00, ContextControlClear at +0x04, CommandPtr at +0x0c.
-    pub const AS_REQ_TR_CONTEXT: u32 = 0x180;
-    pub const AS_RSP_TR_CONTEXT: u32 = 0x1a0;
-    pub const AS_REQ_RCV_CONTEXT: u32 = 0x1c0;
-    pub const AS_RSP_RCV_CONTEXT: u32 = 0x1e0;
-
-    pub const CONTEXT_LEN: u32 = 0x20;
-    pub const CONTEXT_CONTROL_SET: u32 = 0x00;
-    pub const CONTEXT_CONTROL_CLEAR: u32 = 0x04;
-    pub const COMMAND_PTR: u32 = 0x0c;
+    pub const VERSION:          u32 = 0x00;
+    pub const ACK:              u32 = 0x04;
+    pub const CTRL:             u32 = 0x08;
+    pub const INTERRUPT:        u32 = 0x0C;
+    pub const INT_MASK:         u32 = 0x10;
+    pub const CYCLE_TIMER:      u32 = 0x14;
+    pub const DIAGNOSTIC:       u32 = 0x18;
+    pub const RESERVED:         u32 = 0x1c;
+    pub const PHYACCESS:        u32 = 0x20;
+    pub const BUS_RESET:        u32 = 0x24;
+    pub const TIMELIMIT:        u32 = 0x28;
+    pub const ATF_STATUS:       u32 = 0x2C;
+    pub const ARF_STATUS:       u32 = 0x30;
+    pub const MTQ_STATUS:       u32 = 0x34;
+    pub const MRF_STATUS:       u32 = 0x38;
+    pub const CTQ_STATUS:       u32 = 0x3C;
+    pub const CRF_STATUS:       u32 = 0x40;
+    pub const ORB_FETCH_CTRL:   u32 = 0x44;
+    pub const MANAGEMENT_AGENT: u32 = 0x48;
+    pub const COMMAND_AGENT:    u32 = 0x4C;
+    pub const AGENT_CTRL:       u32 = 0x50;
+    pub const ORB_PTR1:         u32 = 0x54;
+    pub const ORB_PTR2:         u32 = 0x58;
+    pub const AGENT_STATUS:     u32 = 0x5C;
+    pub const TXTIMER_CTRL:     u32 = 0x60;
+    pub const TXTIMER_STATUS1:  u32 = 0x64;
+    pub const TXTIMER_STATUS2:  u32 = 0x68;
+    pub const TXTIMER_STATUS3:  u32 = 0x6C;
+    pub const WRITE_FIRST:      u32 = 0x70;
+    pub const WRITE_CONTINUE:   u32 = 0x74;
+    pub const WRITE_UPDATE:     u32 = 0x78;
+    pub const ARF_DATA:         u32 = 0x80;
+    pub const MRF_DATA:         u32 = 0x84;
+    pub const CRF_DATA:         u32 = 0x88;
+    pub const CFR_CTRL:         u32 = 0x8C;
+    pub const DMA_CTRL:         u32 = 0x90;
+    pub const BI_CTRL:          u32 = 0x94;
+    pub const DXF_SIZE:         u32 = 0x98;
+    pub const DXF_AVAIL:        u32 = 0x9C;
+    pub const DXF_ACK:          u32 = 0xA0;
+    pub const DTF_1ST_CONTINUE: u32 = 0xA4;
+    pub const DTF_UPDATE:       u32 = 0xA8;
+    pub const DRF_DATA:         u32 = 0xAC;
+    pub const DTF_CTRL0:        u32 = 0xB0;
+    pub const DTF_CTRL1:        u32 = 0xB4;
+    pub const DTF_CTRL2:        u32 = 0xB8;
+    pub const DTF_CTRL3:        u32 = 0xBC;
+    pub const DRF_CTRL0:        u32 = 0xC0;
+    pub const DRF_CTRL1:        u32 = 0xC4;
+    pub const DRF_CTRL2:        u32 = 0xC8;
+    pub const DRF_CTRL3:        u32 = 0xCC;
+    pub const DRF_HDR0:         u32 = 0xD0;
+    pub const DRF_HDR1:         u32 = 0xD4;
+    pub const DRF_HDR2:         u32 = 0xD8;
+    pub const DRF_HDR3:         u32 = 0xDC;
+    pub const DRF_TAILER:       u32 = 0xE0;
+    pub const DXF_EXPCTD_VALUE: u32 = 0xE4;
+    pub const DXF_HDRSTAT0:     u32 = 0xE8;
+    pub const DXF_HDRSTAT1:     u32 = 0xEC;
+    pub const DXF_HDRSTAT2:     u32 = 0xF0;
+    pub const DXF_HDRSTAT3:     u32 = 0xF4;
+    pub const LOG_ROM_CTRL:     u32 = 0xF8;
+    pub const LOG_ROM_DATA:     u32 = 0xFC;
 }
 
-/// `HCControl` bits.
-///
-/// RetailOS brings the link up with the canonical OHCI sequence: softReset,
-/// LPS, postedWriteEnable, linkEnable -- each followed by a read-back.
-mod hc_control {
-    /// Self-clearing. The firmware polls for it to come back down.
-    pub const SOFT_RESET: usize = 16;
+mod phy {
+    type Range = std::ops::RangeInclusive<usize>;
+    pub const RD_PY       : usize = 31;
+    pub const WR_PY       : usize = 30;
+    pub const PHY_RG_AD   : Range = 24 ..= 27;
+    pub const PHY_RG_DATA : Range = 16 ..= 23;
+    pub const PHY_RX_AD   : Range =  8 ..= 11;
+    pub const PHY_RX_DATA : Range =  0 ..=  7;
 }
 
-/// `PhyControl` (0xec).
-///
-/// The firmware drives it as: write `REG_ADDR` with `RD_REG` set, then spin
-/// until `RD_DONE` comes up and take the result out of `RD_DATA`. Linux does
-/// the identical handshake -- `ohci1394.c:237` polls `PhyControl & 0x80000000`.
-///
-/// RetailOS reads PHY register 5 (a single write of 0x0000_8500); diagnostics
-/// reads PHY register 8 (built up across two writes into 0x0000_8800).
-mod phy_control {
-    use std::ops::RangeInclusive;
-
-    /// PHY register to access.
-    pub const REG_ADDR: RangeInclusive<usize> = 8..=11;
-    /// Kicks off a write. Cleared once the transfer completes.
-    pub const WR_REG: usize = 14;
-    /// Kicks off a read. Cleared once the transfer completes.
-    pub const RD_REG: usize = 15;
-    /// Value read back from the PHY.
-    pub const RD_DATA: RangeInclusive<usize> = 16..=23;
-    /// Address the `RD_DATA` value came from.
-    pub const RD_ADDR: RangeInclusive<usize> = 24..=28;
-    /// Set once a read has completed.
-    pub const RD_DONE: usize = 31;
-}
-
-#[derive(Debug, Default)]
-struct Context {
-    control: u32,
-    /// Bits 3..0 are `Z` (the descriptor count), the rest is the 16-byte
-    /// aligned address of the descriptor block. Nothing ever fetches these,
-    /// since there's no bus to run transfers on.
-    command_ptr: u32,
-}
+// TSB43AA82 reg | 00h         | 04h         | 08h         | 0ch         | ...
+// mapped to     | 00 02 04 06 | 08 0a 0c 0e | 10 12 14 16 | 18 1a 1c 1e |
 
 #[derive(Debug)]
 pub struct TSB43AA82 {
-    hc_control: u32,
-    link_control: u32,
+    rreg: u32,
+    rval: u32,
+    wreg: u32,
+    wval: u32,
     int_event: u32,
     int_mask: u32,
-    phy_control: u32,
+    phyaccess: u32,
+    cycle_timer: u32,
+
+    hc_control: u32,
+    link_control: u32,
     self_id_buffer: u32,
-
-    /// ATRQ, ATRS, ARRQ, ARRS -- in that order.
-    contexts: [Context; 4],
-
-    /// Backing store for the parts of the window we haven't identified.
-    /// The observed window is 0x200 bytes, addressed 1:1.
     reg: Box<[u32; 0x80]>,
 }
 
 impl TSB43AA82 {
     pub fn new() -> TSB43AA82 {
         TSB43AA82 {
-            hc_control: 0,
-            link_control: 0,
+            rreg: 0,
+            rval: 0,
+            wreg: 0,
+            wval: 0,
             int_event: 0,
             int_mask: 0,
-            phy_control: 0,
+            phyaccess: 0,
+            cycle_timer: 0,
+
+            hc_control: 0,
+            link_control: 0,
             self_id_buffer: 0,
-            contexts: Default::default(),
             reg: Box::new([0; 0x80]),
         }
     }
 
-    /// Read a PHY register. All fields set to zero, because we don't
-    /// want to emulate an actual FireWire host.
     fn read_phy(&self, _addr: u8) -> u8 {
         0
     }
 
-    /// Map a window offset onto one of the four async DMA contexts, returning
-    /// the context index and the offset within its 0x20-byte block.
-    fn context_at(offset: u32) -> Option<(usize, u32)> {
-        let idx = match offset & !(reg::CONTEXT_LEN - 1) {
-            reg::AS_REQ_TR_CONTEXT => 0,
-            reg::AS_RSP_TR_CONTEXT => 1,
-            reg::AS_REQ_RCV_CONTEXT => 2,
-            reg::AS_RSP_RCV_CONTEXT => 3,
-            _ => return None,
-        };
-
-        Some((idx, offset & (reg::CONTEXT_LEN - 1)))
+    fn read_reg(&mut self, offset: u32) -> u32 {
+        match offset {
+            reg::VERSION => 0x4300_8203,
+            reg::INTERRUPT => self.int_event | 0x8000_0000,
+            reg::INT_MASK => self.int_mask,
+            reg::PHYACCESS => self.phyaccess,
+            reg::CYCLE_TIMER => { self.cycle_timer += 1; self.cycle_timer }
+            reg::DMA_CTRL => 0,
+            reg::BI_CTRL => 0,
+            reg::DRF_CTRL0 => 0,
+            reg::DTF_CTRL0 => 0,
+            reg::LOG_ROM_CTRL => 0,
+            _ => 0xDEADCAFE,
+        }
+    }
+    fn write_reg(&mut self, offset: u32, val: u32) {
+        match offset {
+            reg::INTERRUPT => self.int_event &= !val,
+            reg::INT_MASK => self.int_mask = val,
+            reg::PHYACCESS => {
+                self.phyaccess = val & !(1 << phy::RD_PY | 1 << phy::WR_PY);
+                let phy_rg_ad = val.get_bits(phy::PHY_RG_AD);
+                let phy_rg_data = val.get_bits(phy::PHY_RG_DATA);
+                // write
+                if val.get_bit(phy::WR_PY) {
+                    {debug!(target: "FW", "  PHY write : reg:{:8x} val:{:8x}", phy_rg_ad, phy_rg_data);}
+                    if phy_rg_ad == 1 && (phy_rg_data & 0x40) == 0x40 {
+                        {debug!(target: "FW", "Phy1 - IBR=1 - Initiate bus reset");}
+                    }
+                }
+                // read
+                if val.get_bit(phy::RD_PY) {
+                    let data = match phy_rg_ad {
+                        1 => 0x3f, // phy reg 1, RHB(0x80)=0, IBR(0x40)=0, Gap_Count=0x3f
+                        _ => 0,
+                    };
+                    self.phyaccess.set_bits(phy::PHY_RX_AD, phy_rg_ad);
+                    self.phyaccess.set_bits(phy::PHY_RX_DATA, data);
+                    {debug!(target: "FW", "  PHY read  : reg:{:8x} val:{:8x} phyacc:{:x}", phy_rg_ad, data, self.phyaccess);}
+                    self.int_event |= 0xffff_0000;
+                }
+            }
+            _ => {},
+        }
     }
 }
 
@@ -130,35 +178,33 @@ impl Device for TSB43AA82 {
     }
 
     fn probe(&self, offset: u32) -> Probe {
-        if let Some((idx, off)) = TSB43AA82::context_at(offset) {
-            let ctx = ["ATRQ", "ATRS", "ARRQ", "ARRS"][idx];
-            return Probe::Register(match off {
-                reg::CONTEXT_CONTROL_SET => ctx,
-                reg::CONTEXT_CONTROL_CLEAR => ctx,
-                reg::COMMAND_PTR => ctx,
-                _ => "(?) context",
-            });
-        }
-
-        let reg = match offset {
-            0x02 => "Version/Revision",
-            0x18 | 0x1a => "Diagnostics",
-            0x1c | 0x1e => "Reserved?",
-            reg::AT_RETRIES => "ATRetries",
-            reg::HC_CONTROL_SET => "HCControlSet",
-            reg::HC_CONTROL_CLEAR => "HCControlClear",
-            reg::SELF_ID_BUFFER => "SelfIDBuffer",
-            reg::INT_EVENT_SET => "IntEventSet",
-            reg::INT_EVENT_CLEAR => "IntEventClear",
-            reg::INT_MASK_SET => "IntMaskSet",
-            reg::INT_MASK_CLEAR => "IntMaskClear",
-            reg::FAIRNESS_CONTROL => "FairnessControl",
-            reg::LINK_CONTROL_SET => "LinkControlSet",
-            reg::LINK_CONTROL_CLEAR => "LinkControlClear",
-            reg::PHY_CONTROL => "PhyControl",
-            reg::AS_REQ_FILTER_HI_SET => "AsReqFilterHiSet",
-            reg::AS_REQ_FILTER_LO_SET => "AsReqFilterLoSet",
-            _ => "(?)",
+        let reg = match offset >> 1 & !0x3  {
+            reg::VERSION          => "00h - Version/Revision",
+            reg::CTRL             => "08h - Control",
+            reg::INTERRUPT        => "0Ch - Interrupt",
+            reg::INT_MASK         => "10h - Interrupt Mask",
+            reg::CYCLE_TIMER      => "14h - Cycle Timer",
+            reg::PHYACCESS        => "20h - PHY Access",
+            reg::TIMELIMIT        => "28h - Time Limit",
+            reg::ATF_STATUS       => "2Ch - ATF Status",
+            reg::ARF_STATUS       => "30h - ARF Status",
+            reg::MTQ_STATUS       => "34h - MTQ Status",
+            reg::MRF_STATUS       => "38h - MRF Status",
+            reg::CTQ_STATUS       => "3Ch - CTQ Status",
+            reg::CRF_STATUS       => "40h - CRF Status",
+            reg::ORB_FETCH_CTRL   => "44h - ORB Fetch Control",
+            reg::MANAGEMENT_AGENT => "48h - Management Agent",
+            reg::COMMAND_AGENT    => "4Ch - Command Agent",
+            reg::WRITE_FIRST      => "70h - Write-First",
+            reg::CFR_CTRL         => "8Ch - CFR Control",
+            reg::DMA_CTRL         => "90h - DMA Control",
+            reg::BI_CTRL          => "94h - Bulky If Control",
+            reg::DXF_SIZE         => "98h - DxF Size",
+            reg::DTF_CTRL0        => "B0h - DTF Control 0",
+            reg::DRF_CTRL0        => "C0h - DRF Control 0",
+            reg::LOG_ROM_CTRL     => "F8h - Log/ROM Control",
+            reg::LOG_ROM_DATA     => "FCh - Log ROM Data",
+            other => Box::leak(format!("{:02X}h - Unknown (?)", other).into_boxed_str()),
         };
 
         Probe::Register(reg)
@@ -167,136 +213,59 @@ impl Device for TSB43AA82 {
 
 impl Memory for TSB43AA82 {
     fn r16(&mut self, offset: u32) -> MemResult<u16> {
-        let val = match offset {
-            0x02 => 0x4300,
-            0x18 => 0x0000,
-            0x1a => 0x0000,
-            0x1c => 0x00ff,
-            0x1e => 0x00ff,
+        let fw_reg = (offset >> 1) & !0x3;
+        let step   = (offset >> 1) & 0x3;
+        match step {
+            0 => {
+                self.rreg = fw_reg;
+                self.rval = self.read_reg(fw_reg);
+                if true
+                //  && fw_reg != 0x0c // INTERRUPT
+                //  && fw_reg != 0x10 // INT_MASK
+                 && fw_reg != 0x14 // CYCLE_TIMER
+                 {debug!(target: "FW", " read reg:{:8x} val:{:8x} ({})", self.rreg, self.rval, self.probe(offset));}
+                // if self.rval == 0xDEADCAFE { return Err(Unexpected) }
+                Err(StubRead(Trace, (self.rval) & 0xff as u32))
+            }
+            1..=3 => {
+                if self.rreg != fw_reg { return Err(Unexpected) }
+                Err(StubRead(Trace, (self.rval >> (step * 8)) & 0xff))
+            }
+            _ => { return Err(Unexpected) }
+        }
+    }
 
-            0x10 => 0xffff,
-            0x12 => 0xffff,
-            0x14 => 0xffff,
-            0x16 => 0xffff,
-
-            _ => 0,
-            // reg::HC_CONTROL_SET | reg::HC_CONTROL_CLEAR => self.hc_control,
-            // reg::SELF_ID_BUFFER => self.self_id_buffer,
-            // reg::INT_EVENT_SET | reg::INT_EVENT_CLEAR => self.int_event,
-            // reg::INT_MASK_SET | reg::INT_MASK_CLEAR => self.int_mask,
-            // reg::LINK_CONTROL_SET | reg::LINK_CONTROL_CLEAR => self.link_control,
-            // reg::PHY_CONTROL => self.phy_control,
-            // _ => self.reg[idx] as u16,
-        };
-        // Ok(val)
-        Err(StubRead(Debug, val))
+    fn w16(&mut self, offset: u32, val: u16) -> MemResult<()> {
+        let fw_reg = (offset >> 1) & !0x3;
+        let step   = (offset >> 1) & 0x3;
+        match step {
+            0 => {
+                self.wreg = fw_reg;
+                self.wval = val as u32;
+            }
+            1..=2 => {
+                if self.wreg != fw_reg { return Err(Unexpected) }
+                self.wval |= (val as u32) << (step * 8);
+            }
+            3 => {
+                if self.wreg != fw_reg { return Err(Unexpected) }
+                self.wval |= (val as u32) << 24;
+                if true
+                //  && fw_reg != 0x0c // INTERRUPT
+                //  && fw_reg != 0x10 // INT_MASK
+                {debug!(target: "FW", "write reg:{:8x} val:{:8x} ({})", self.wreg, self.wval, self.probe(offset));}
+                self.write_reg(self.wreg, self.wval);
+            }
+            _ => { return Err(Unexpected) }
+        }
+        return Ok(())
     }
 
     fn r32(&mut self, offset: u32) -> MemResult<u32> {
-        if offset & 0b1 != 0 {
-            return Err(Misaligned);
-        }
-
-        let idx = (offset / 4) as usize;
-        if idx >= self.reg.len() {
-            return Err(Unexpected);
-        }
-
-        if let Some((ctx, off)) = TSB43AA82::context_at(offset) {
-            let val = match off {
-                // The Set and Clear aliases read back the same value.
-                reg::CONTEXT_CONTROL_SET | reg::CONTEXT_CONTROL_CLEAR => self.contexts[ctx].control,
-                reg::COMMAND_PTR => self.contexts[ctx].command_ptr,
-                _ => self.reg[idx],
-            };
-            return Err(StubRead(Debug, val));
-        }
-
-        let val = match offset {
-            reg::HC_CONTROL_SET | reg::HC_CONTROL_CLEAR => self.hc_control,
-            reg::SELF_ID_BUFFER => self.self_id_buffer,
-            reg::INT_EVENT_SET | reg::INT_EVENT_CLEAR => self.int_event,
-            reg::INT_MASK_SET | reg::INT_MASK_CLEAR => self.int_mask,
-            reg::LINK_CONTROL_SET | reg::LINK_CONTROL_CLEAR => self.link_control,
-            reg::PHY_CONTROL => self.phy_control,
-            _ => self.reg[idx],
-        };
-
-        Err(StubRead(Debug, val))
-    }
-
-    fn w16(&mut self, offset: u32, _val: u16) -> MemResult<()> {
-        if offset & 0b1 != 0 {
-            return Err(Misaligned);
-        }
-        return Err(StubWrite(Debug, ()));
+        Err(Unexpected)
     }
 
     fn w32(&mut self, offset: u32, val: u32) -> MemResult<()> {
-        if offset & 0b1 != 0 {
-            return Err(Misaligned);
-        }
-
-        let idx = (offset / 4) as usize;
-        if idx >= self.reg.len() {
-            return Err(Unexpected);
-        }
-
-        if let Some((ctx, off)) = TSB43AA82::context_at(offset) {
-            match off {
-                reg::CONTEXT_CONTROL_SET => self.contexts[ctx].control |= val,
-                reg::CONTEXT_CONTROL_CLEAR => self.contexts[ctx].control &= !val,
-                reg::COMMAND_PTR => self.contexts[ctx].command_ptr = val,
-                _ => self.reg[idx] = val,
-            }
-            return Err(StubWrite(Debug, ()));
-        }
-
-        match offset {
-            reg::HC_CONTROL_SET => {
-                self.hc_control |= val;
-                // softReset never stays set: the reset completes instantly, and
-                // the firmware polls for the bit to come back down.
-                self.hc_control.set_bit(hc_control::SOFT_RESET, false);
-            }
-            reg::HC_CONTROL_CLEAR => self.hc_control &= !val,
-
-            reg::SELF_ID_BUFFER => self.self_id_buffer = val,
-
-            reg::INT_EVENT_SET => self.int_event |= val,
-            reg::INT_EVENT_CLEAR => self.int_event &= !val,
-            reg::INT_MASK_SET => self.int_mask |= val,
-            reg::INT_MASK_CLEAR => self.int_mask &= !val,
-
-            reg::LINK_CONTROL_SET => self.link_control |= val,
-            reg::LINK_CONTROL_CLEAR => self.link_control &= !val,
-
-            reg::PHY_CONTROL => {
-                let mut val = val;
-
-                // Transfers complete instantly: there's no bus to arbitrate
-                // for, so there's nothing to make the firmware wait on. Leaving
-                // RD_DONE clear instead would wedge it -- diagnostics spins on
-                // that bit at pc 0x1000bfb0 with no timeout.
-                if val.get_bit(phy_control::RD_REG) {
-                    let addr = val.get_bits(phy_control::REG_ADDR) as u8;
-                    let data = self.read_phy(addr);
-
-                    val.set_bit(phy_control::RD_REG, false)
-                        .set_bits(phy_control::RD_ADDR, addr as u32)
-                        .set_bits(phy_control::RD_DATA, data as u32)
-                        .set_bit(phy_control::RD_DONE, true);
-                }
-
-                // Writes to the PHY go nowhere, but the bit still has to clear.
-                val.set_bit(phy_control::WR_REG, false);
-
-                self.phy_control = val;
-            }
-
-            _ => self.reg[idx] = val,
-        }
-
-        Err(StubWrite(Debug, ()))
+        Err(Unexpected)
     }
 }
