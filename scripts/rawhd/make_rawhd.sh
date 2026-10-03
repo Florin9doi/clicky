@@ -13,7 +13,7 @@ ipodhd.img2 : start=       61503, size=      118784, type=b
 EOM
 
 if [ -n "$1" ]; then
-    dd if=$1 of=ipodhd.img bs=1M seek=$((63 * 512)) oflag=seek_bytes conv=notrunc status=progress
+    dd if="$1" of=ipodhd.img bs=1M seek=$((63 * 512)) oflag=seek_bytes conv=notrunc status=progress
 fi
 
 dd if=/dev/zero of=ipodhd_fat32.img bs=1M count=0 seek=$((118784 * 512)) oflag=seek_bytes status=progress
