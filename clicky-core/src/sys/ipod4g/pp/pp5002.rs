@@ -20,6 +20,7 @@ pub struct PP5002Bus {
     pub core: PpCore,
     pub cpucon: devices::CpuCon5002,
     pub devcon: devices::DevCon5002,
+    pub ppver: devices::PpVer5002,
 
     pub scroll: devices::ScrollWheel,
     pub firewire: devices::TSB43AA82,
@@ -71,6 +72,7 @@ impl PP5002Bus {
             core,
             cpucon: CpuCon5002::new(),
             devcon: DevCon5002::new(),
+            ppver: PpVer5002::new(),
             scroll: ScrollWheel::new(),
             firewire: TSB43AA82::new(),
             unk4000: Unk5002_4000::new(),
@@ -217,7 +219,7 @@ mmap! {
         0xcf00_1110..=0xcf00_1113 => usec_timer,
         0xcf00_4000..=0xcf00_401f => unk4000,
         0xcf00_4020..=0xcf00_402f => cachecon,
-        0xcf00_4030..=0xcf00_403f => total_mystery, // pp_ver
+        0xcf00_4030..=0xcf00_403f => ppver,
         0xcf00_4040..=0xcf00_404f => total_mystery, // wmcodec?
         0xcf00_4050..=0xcf00_40ff => cpucon,
         0xcf00_5000..=0xcf00_50ff => devcon,
