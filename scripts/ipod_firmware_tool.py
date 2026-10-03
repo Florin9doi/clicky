@@ -731,6 +731,79 @@ def find_fwup_parts(aupd_data: bytes) -> list[FwUpPart]:
     return parts
 
 
+# --------------------------------------------------------------------------
+# Fallback for the earliest firmware files: no "FwUp"/"flsh" headers at all,
+# but the decoded AUPD still contains raw NOR data at fixed offsets. A
+# hardcoded table, keyed by the AUPD's directory checksum, tells us exactly
+# where to cut it and where each chunk belongs in the flash.
+# --------------------------------------------------------------------------
+
+@dataclass
+class FallbackChunk:
+    aupd_offset: int   # where the chunk starts inside the decoded AUPD image
+    length: int        # chunk length in bytes
+    dest_offset: int   # address the chunk occupies in the rebuilt flash image
+
+
+@dataclass
+class FallbackEntry:
+    version: str                 # human-readable firmware version
+    checksum: int                # AUPD directory checksum (the lookup key)
+    chunks: list[FallbackChunk]
+
+
+FALLBACK_TABLE: list[FallbackEntry] = [
+    FallbackEntry("1g v1.0.0", 0x0e30b4ca, [FallbackChunk(0x7EC4,  0x2000, 0x0000),
+                                            FallbackChunk(0x9EC4, 0xFC000, 0x4000)]),
+    FallbackEntry("1g v1.0.2", 0x0e2fc2f8, [FallbackChunk(0x7EFC,  0x2000, 0x0000),
+                                            FallbackChunk(0x9EFC, 0xFC000, 0x4000)]),
+    FallbackEntry("1g v1.0.4", 0x0e98f686, [FallbackChunk(0x7EFC,  0x2000, 0x0000),
+                                            FallbackChunk(0x9EFC, 0xFC000, 0x4000)]),
+    FallbackEntry("1g v1.1.0", 0x0e2be30d, [FallbackChunk(0x82D0,  0x2000, 0x0000),
+                                            FallbackChunk(0xA2D0, 0xFC000, 0x4000)]),
+]
+
+FALLBACK_BY_CHECKSUM: dict[int, FallbackEntry] = {e.checksum: e for e in FALLBACK_TABLE}
+assert len(FALLBACK_BY_CHECKSUM) == len(FALLBACK_TABLE), "duplicate checksum in FALLBACK_TABLE"
+
+
+def fallback_parts(aupd_data: bytes, aupd_checksum: int) -> tuple[list[FwUpPart], str]:
+    """Looks up `aupd_checksum` in FALLBACK_TABLE and returns the chunks as
+    FwUpPart objects (zero-length header, so payload() slices straight out
+    of the AUPD) plus a human-readable note. Returns ([], note) if the
+    checksum is unknown or a chunk doesn't fit inside the AUPD."""
+    entry = FALLBACK_BY_CHECKSUM.get(aupd_checksum)
+    if entry is None:
+        return [], (f"AUPD checksum 0x{aupd_checksum:08x} is not in the fallback "
+                    f"table - add it to FALLBACK_TABLE if this is an early firmware")
+    for c in entry.chunks:
+        if c.aupd_offset + c.length > len(aupd_data):
+            return [], (f"fallback entry {entry.version}: chunk @0x{c.aupd_offset:x} "
+                        f"len=0x{c.length:x} exceeds AUPD size {len(aupd_data):,} - skipped")
+    parts = [FwUpPart(header_offset=c.aupd_offset, header_len=0,
+                      payload_len=c.length, dest_offset=c.dest_offset,
+                      reserved1=0, reserved2=0, _aupd_data=aupd_data)
+             for c in entry.chunks]
+    return parts, f"no FwUp/flsh headers; using fallback table entry for firmware {entry.version}"
+
+
+def get_flash_parts(fw: "FirmwareImage") -> tuple[list[FwUpPart], str]:
+    """find_fwup_parts() on the decoded AUPD, falling back to the
+    checksum-keyed table if that finds nothing. Returns (parts, note);
+    note is empty when the normal path worked."""
+    img = fw.find("AUPD")
+    if img is None:
+        return [], "This firmware has no AUPD image."
+    try:
+        data = img.decoded_data()
+    except Exception as e:
+        return [], f"Failed to decode AUPD: {e}"
+    parts = find_fwup_parts(data)
+    if parts:
+        return parts, ""
+    return fallback_parts(data, img.checksum)
+
+
 def combine_fwup_parts(
     parts: list[FwUpPart],
     pad_pattern: bytes = FLASH_PAD_PATTERN,
@@ -962,10 +1035,11 @@ def main():
         _write_image(img, out_path, decoded=True)
 
     if args.extract_flash_parts:
-        aupd_data = _get_decoded_aupd_or_die(fw)
-        parts = find_fwup_parts(aupd_data)
+        parts, note = get_flash_parts(fw)
+        if note:
+            print(f"[*] {note}")
         if not parts:
-            print("[!] No 'FwUp'/'flsh' parts found inside AUPD.")
+            print("[!] No flash parts found inside AUPD.")
         else:
             os.makedirs(args.out_dir, exist_ok=True)
             addr_width = max(5, len(f"{max(p.last_addr for p in parts):x}"))
@@ -978,10 +1052,11 @@ def main():
                       f"-> {out_path}")
 
     if args.combine_flash is not None:
-        aupd_data = _get_decoded_aupd_or_die(fw)
-        parts = find_fwup_parts(aupd_data)
+        parts, note = get_flash_parts(fw)
+        if note:
+            print(f"[*] {note}")
         if not parts:
-            print("[!] No 'FwUp'/'flsh' parts found inside AUPD - nothing to combine.")
+            print("[!] No flash parts found inside AUPD - nothing to combine.")
         else:
             out_path = args.combine_flash or os.path.join(args.out_dir, f"{stem}_flash.bin")
             out_dir = os.path.dirname(os.path.abspath(out_path))
