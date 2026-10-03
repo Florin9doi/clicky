@@ -179,13 +179,22 @@ def _build_gfcs_struct(elements: list[tuple[str, str]]) -> bytes:
 
 GFCS_STRUCTS: dict[str, bytes] = {
     # Replace with proper dumps when/if aval    # !!! DO NOT RE-ORDER THE ELEMENTS !!! #
-    "1g2g": _build_gfcs_struct([ # copy-paste from 3g + unk elem removed + HwVr fixed
+    "1g": _build_gfcs_struct([ # copy-paste from 3g + unk elem removed + HwVr fixed
         ("6D 4E 72 53", "32 58 35 31 36 30 32 52 50 51 35 00 00 00 00 00"),  # mNrS/SrNm
         ("64 49 77 46", "72 15 4C 00 00 00 00 00 00 00 00 00 00 00 00 00"),  # dIwF/FwId
-        ("64 49 77 48", "0A 43 01 82 00 00 00 00 00 00 00 00 00 00 00 00"),  # dIwH/HwId
+        ("64 49 77 48", "0B 35 01 82 00 00 00 00 00 00 00 00 00 00 00 00"),  # dIwH/HwId
         ("79 72 74 42", "FF FF FF FF FF FF FF FF FF FF FF FF FF FF FF FF"),  # yrtB/Btry
         ("41 63 74 52", "00 00 00 00 01 A1 FE FF 00 00 00 00 00 00 00 00"),  # ActR/RtcA
-        ("72 56 77 48", "00 00 00 00 01 00 02 00 00 00 00 00 00 00 00 00"),  # rVwH/HwVr
+        ("72 56 77 48", "00 00 00 00 00 00 01 00 00 00 00 00 00 00 00 00"),  # rVwH/HwVr
+        # Add DrmV? It is present on the latest version.
+    ]),
+    "2g": _build_gfcs_struct([ # copy-paste from 3g + unk elem removed + HwVr fixed
+        ("6D 4E 72 53", "32 58 35 31 36 30 32 52 50 51 35 00 00 00 00 00"),  # mNrS/SrNm
+        ("64 49 77 46", "72 15 4C 00 00 00 00 00 00 00 00 00 00 00 00 00"),  # dIwF/FwId
+        ("64 49 77 48", "7A 36 01 82 00 00 00 00 00 00 00 00 00 00 00 00"),  # dIwH/HwId
+        ("79 72 74 42", "FF FF FF FF FF FF FF FF FF FF FF FF FF FF FF FF"),  # yrtB/Btry
+        ("41 63 74 52", "00 00 00 00 01 A1 FE FF 00 00 00 00 00 00 00 00"),  # ActR/RtcA
+        ("72 56 77 48", "00 00 00 00 00 00 02 00 00 00 00 00 00 00 00 00"),  # rVwH/HwVr
         # Add DrmV? It is present on the latest version.
     ]),
     "3g": _build_gfcs_struct([
@@ -204,24 +213,24 @@ GFCS_STRUCTS: dict[str, bytes] = {
     "4g_mono": _build_gfcs_struct([ # copy-paste from 4g color + HwVr fixed
         ("6D 4E 72 53", "4A 51 35 33 37 41 30 4E 54 44 53 00 00 00 00 00"),  # mNrS/SrNm
         ("64 49 77 46", "00 00 00 01 36 4F 79 14 00 27 0A 00 00 00 00 00"),  # dIwF/FwId
-        ("64 49 77 48", "4A 76 01 82 00 00 00 00 00 00 00 00 00 00 00 00"),  # dIwH/HwId
+        ("64 49 77 48", "5A 53 01 82 00 00 00 00 00 00 00 00 00 00 00 00"),  # dIwH/HwId
         ("79 72 74 42", "FF FF FF FF FF FF FF FF FF FF FF FF FF FF FF FF"),  # yrtB/Btry
         ("41 63 74 52", "FF FF FF FF FF FF FF FF FF FF FF FF FF FF FF FF"),  # ActR/RtcA
         ("72 56 77 48", "00 00 00 00 14 00 05 00 00 00 00 00 00 00 00 00"),  # rVwH/HwVr
         ("6E 67 65 52", "01 00 02 00 01 00 00 00 00 00 00 00 00 00 00 00"),  # ngeR/Regn
-        ("23 64 6F 4D", "4D 41 30 37 39 00 00 00 00 00 00 00 00 00 00 00"),  # #doM/Mod#
+        ("23 64 6F 4D", "4D 39 32 38 32 00 00 00 00 00 00 00 00 00 00 00"),  # #doM/Mod#
         ("74 6E 6F 43", "FF FF FF FF FF FF FF FF FF FF FF FF FF FF FF FF"),  # tnoC/Cont
         ("56 6D 72 44", "00 00 00 00 06 00 00 00 00 00 00 00 00 00 00 00"),  # VmrD/DrmV
     ]),
     "4g_photo": _build_gfcs_struct([ # copy-paste from 4g color + HwVr fixed
         ("6D 4E 72 53", "4A 51 35 33 37 41 30 4E 54 44 53 00 00 00 00 00"),  # mNrS/SrNm
         ("64 49 77 46", "00 00 00 01 36 4F 79 14 00 27 0A 00 00 00 00 00"),  # dIwF/FwId
-        ("64 49 77 48", "4A 76 01 82 00 00 00 00 00 00 00 00 00 00 00 00"),  # dIwH/HwId
+        ("64 49 77 48", "2A 64 01 82 00 00 00 00 00 00 00 00 00 00 00 00"),  # dIwH/HwId
         ("79 72 74 42", "FF FF FF FF FF FF FF FF FF FF FF FF FF FF FF FF"),  # yrtB/Btry
         ("41 63 74 52", "FF FF FF FF FF FF FF FF FF FF FF FF FF FF FF FF"),  # ActR/RtcA
         ("72 56 77 48", "00 00 00 00 00 00 06 00 00 00 00 00 00 00 00 00"),  # rVwH/HwVr
         ("6E 67 65 52", "01 00 02 00 01 00 00 00 00 00 00 00 00 00 00 00"),  # ngeR/Regn
-        ("23 64 6F 4D", "4D 41 30 37 39 00 00 00 00 00 00 00 00 00 00 00"),  # #doM/Mod#
+        ("23 64 6F 4D", "4D 39 35 38 35 00 00 00 00 00 00 00 00 00 00 00"),  # #doM/Mod#
         ("74 6E 6F 43", "FF FF FF FF FF FF FF FF FF FF FF FF FF FF FF FF"),  # tnoC/Cont
         ("56 6D 72 44", "00 00 00 00 06 00 00 00 00 00 00 00 00 00 00 00"),  # VmrD/DrmV
     ]),
@@ -249,34 +258,34 @@ GFCS_STRUCTS: dict[str, bytes] = {
     "mini1g": _build_gfcs_struct([ # copy-paste from 4g color + HwVr fixed
         ("6D 4E 72 53", "4A 51 35 33 37 41 30 4E 54 44 53 00 00 00 00 00"),  # mNrS/SrNm
         ("64 49 77 46", "00 00 00 01 36 4F 79 14 00 27 0A 00 00 00 00 00"),  # dIwF/FwId
-        ("64 49 77 48", "4A 76 01 82 00 00 00 00 00 00 00 00 00 00 00 00"),  # dIwH/HwId
+        ("64 49 77 48", "6A 62 01 82 00 00 00 00 00 00 00 00 00 00 00 00"),  # dIwH/HwId
         ("79 72 74 42", "FF FF FF FF FF FF FF FF FF FF FF FF FF FF FF FF"),  # yrtB/Btry
         ("41 63 74 52", "FF FF FF FF FF FF FF FF FF FF FF FF FF FF FF FF"),  # ActR/RtcA
         ("72 56 77 48", "00 00 00 00 13 00 04 00 00 00 00 00 00 00 00 00"),  # rVwH/HwVr
         ("6E 67 65 52", "01 00 02 00 01 00 00 00 00 00 00 00 00 00 00 00"),  # ngeR/Regn
-        ("23 64 6F 4D", "4D 41 30 37 39 00 00 00 00 00 00 00 00 00 00 00"),  # #doM/Mod#
+        ("23 64 6F 4D", "4D 39 31 36 30 00 00 00 00 00 00 00 00 00 00 00"),  # #doM/Mod#
         ("74 6E 6F 43", "FF FF FF FF FF FF FF FF FF FF FF FF FF FF FF FF"),  # tnoC/Cont
         ("56 6D 72 44", "00 00 00 00 06 00 00 00 00 00 00 00 00 00 00 00"),  # VmrD/DrmV
     ]),
     "mini2g": _build_gfcs_struct([ # copy-paste from 4g color + HwVr fixed
         ("6D 4E 72 53", "4A 51 35 33 37 41 30 4E 54 44 53 00 00 00 00 00"),  # mNrS/SrNm
         ("64 49 77 46", "00 00 00 01 36 4F 79 14 00 27 0A 00 00 00 00 00"),  # dIwF/FwId
-        ("64 49 77 48", "4A 76 01 82 00 00 00 00 00 00 00 00 00 00 00 00"),  # dIwH/HwId
+        ("64 49 77 48", "4A 80 01 82 00 00 00 00 00 00 00 00 00 00 00 00"),  # dIwH/HwId
         ("79 72 74 42", "FF FF FF FF FF FF FF FF FF FF FF FF FF FF FF FF"),  # yrtB/Btry
         ("41 63 74 52", "FF FF FF FF FF FF FF FF FF FF FF FF FF FF FF FF"),  # ActR/RtcA
         ("72 56 77 48", "00 00 00 00 02 00 07 00 00 00 00 00 00 00 00 00"),  # rVwH/HwVr
         ("6E 67 65 52", "01 00 02 00 01 00 00 00 00 00 00 00 00 00 00 00"),  # ngeR/Regn
-        ("23 64 6F 4D", "4D 41 30 37 39 00 00 00 00 00 00 00 00 00 00 00"),  # #doM/Mod#
+        ("23 64 6F 4D", "4D 39 38 30 30 00 00 00 00 00 00 00 00 00 00 00"),  # #doM/Mod#
         ("74 6E 6F 43", "FF FF FF FF FF FF FF FF FF FF FF FF FF FF FF FF"),  # tnoC/Cont
         ("56 6D 72 44", "00 00 00 00 06 00 00 00 00 00 00 00 00 00 00 00"),  # VmrD/DrmV
     ]),
     "nano1g": _build_gfcs_struct([ # copy-paste from 5g + HwVr fixed
         ("6D 4E 72 53", "34 4A 36 30 38 32 59 37 54 58 4B 00 00 00 00 00"),  # mNrS/SrNm
         ("64 49 77 46", "00 00 00 01 26 E7 EF 14 00 27 0A 00 00 00 00 00"),  # dIwF/FwId
-        ("64 49 77 48", "3A 76 01 82 00 00 00 00 00 00 00 00 00 00 00 00"),  # dIwH/HwId
+        ("64 49 77 48", "6A 85 01 82 00 00 00 00 00 00 00 00 00 00 00 00"),  # dIwH/HwId
         ("72 56 77 48", "00 00 00 00 06 00 0c 00 00 00 00 00 00 00 00 00"),  # rVwH/HwVr
         ("6E 67 65 52", "01 00 02 00 01 00 02 00 00 00 00 00 00 00 00 00"),  # ngeR/Regn
-        ("23 64 6F 4D", "4D 41 31 34 36 00 00 00 00 00 00 00 00 00 00 00"),  # #doM/Mod#
+        ("23 64 6F 4D", "4D 41 30 30 34 00 00 00 00 00 00 00 00 00 00 00"),  # #doM/Mod#
         ("56 6D 72 44", "00 00 00 00 06 00 00 00 00 00 00 00 00 00 00 00"),  # VmrD/DrmV
     ]),
 }
@@ -295,7 +304,8 @@ class GenerationInfo:
 
 
 IPOD_GENERATIONS: dict[str, GenerationInfo] = {
-    "1g2g":     GenerationInfo(0x2000, "1g2g"),
+    "1g":       GenerationInfo(0x2000, "1g"),
+    "2g":       GenerationInfo(0x2000, "2g"),
     "3g":       GenerationInfo(0x2000, "3g"),
     "4g_mono":  GenerationInfo(0x2000, "4g_mono"),
     "4g_photo": GenerationInfo(0x2000, "4g_photo"),
@@ -308,8 +318,8 @@ IPOD_GENERATIONS: dict[str, GenerationInfo] = {
 
 # A few convenience aliases so common ways of typing a generation still work.
 _GENERATION_ALIASES = {
-    "1": "1g2g", "gen1": "1g2g",
-    "2": "1g2g", "gen2": "1g2g",
+    "1": "1g", "gen1": "1g",
+    "2": "2g", "gen2": "2g",
     "3": "3g", "gen3": "3g",
     "4": "4g_mono", "gen4": "4g_mono", "4g": "4g_mono", "4gmono": "4g_mono", "4g_gray": "4g_mono", "4g_grayscale": "4g_mono",
     "4gphoto": "4g_photo", "photo": "4g_photo",
