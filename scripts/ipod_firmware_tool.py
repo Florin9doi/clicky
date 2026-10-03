@@ -52,26 +52,23 @@ https://github.com/Rockbox/rockbox/tree/master/utils/ipodpatcher):
   ipodpatcher_aupd.c (GetSecurityBlockKey/testMarker), reimplemented
   here in pure Python (see AupdKeyDeriver below).
 
-Usage (pipeline-style: every flag is independent and can be combined in a
-single invocation, executed in this fixed order: list, extract-all,
-extract-raw, extract-decoded):
+Usage (flags can be combined freely; steps always run in this order:
+list, extract-*, build-flash, build-hdd). Output goes to the current
+directory and existing files are never overwritten without --force:
 
-    # List everything in a Firmware file
+    # List the images in a Firmware file
     python3 ipod_firmware_tool.py -i Firmware-5.4.2.1 -l
 
-    # Extract every image, decoded, into a folder
-    python3 ipod_firmware_tool.py -i Firmware-5.4.2.1 -a -o extracted/
+    # Rebuild the NOR flash image (the model selects the gfCS/SCfg
+    # device-info struct that gets inserted)
+    python3 ipod_firmware_tool.py -i Firmware-5.4.2.1 -m 4g -f 4g_flash.bin
 
-    # Extract AUPD exactly as stored on disk (still RC4-obfuscated on v3,
-    # plain on v2) - useful if you want the raw/original bytes
-    python3 ipod_firmware_tool.py -i Firmware-5.4.2.1 -x AUPD aupd_raw.bin
+    # Build a 90 MiB HDD image (pure Python): MBR needs v2/v3 firmware,
+    # APM works for v0/v2/v3; the AUPD id inside the image is patched to 1
+    python3 ipod_firmware_tool.py -i Firmware-5.4.2.1 -d mbr 4g_hdd.bin
 
-    # Extract AUPD fully decoded (RC4-decrypted on v3, as-is on v2)
-    python3 ipod_firmware_tool.py -i Firmware-5.4.2.1 -d AUPD aupd_decoded.bin
-
-    # Everything at once, one shot
-    python3 ipod_firmware_tool.py -i Firmware-5.4.2.1 -l -a -o extracted/ \
-        -x AUPD aupd_raw.bin -d AUPD aupd_decoded.bin -x OSOS osos_raw.bin
+    # Less frequent: --extract-all, --extract-raw IMAGE FILE,
+    # --extract-decoded IMAGE FILE, --extract-flash-parts, --hdd-size MiB
 
 As a library:
     from ipod_firmware_tool import FirmwareImage
@@ -172,7 +169,7 @@ def _build_gfcs_struct(elements: list[tuple[str, str]]) -> bytes:
 
 
 # --------------------------------------------------------------------------
-# "gfCS"/"SCfg" device-info structs, hardcoded per iPod generation/model,
+# "gfCS"/"SCfg" device-info structs, hardcoded per iPod model,
 # captured verbatim from real devices. Each element's comment gives its
 # logical (un-reversed) 4-char tag, e.g. "mNrS" on disk is logical "SrNm".
 # --------------------------------------------------------------------------
@@ -291,33 +288,33 @@ GFCS_STRUCTS: dict[str, bytes] = {
 }
 
 # --------------------------------------------------------------------------
-# Generation -> (gfCS insertion offset, gfCS struct to use) lookup.
+# Model -> (gfCS insertion offset, gfCS struct to use) lookup.
 # `gfcs` is None where we don't yet have a captured struct for that exact
-# generation/model - insertion is simply skipped (with a note) for those
+# model - insertion is simply skipped (with a note) for those
 # until real data is available to add here.
 # --------------------------------------------------------------------------
 
 @dataclass
-class GenerationInfo:
+class ModelInfo:
     offset: int
     gfcs: Optional[str]  # key into GFCS_STRUCTS, or None if not yet known
 
 
-IPOD_GENERATIONS: dict[str, GenerationInfo] = {
-    "1g":       GenerationInfo(0x2000, "1g"),
-    "2g":       GenerationInfo(0x2000, "2g"),
-    "3g":       GenerationInfo(0x2000, "3g"),
-    "4g_mono":  GenerationInfo(0x2000, "4g_mono"),
-    "4g_photo": GenerationInfo(0x2000, "4g_photo"),
-    "4g_color": GenerationInfo(0x2000, "4g_color"),
-    "5g":       GenerationInfo(0x4000, "5g"),
-    "mini1g":   GenerationInfo(0x2000, "mini1g"),
-    "mini2g":   GenerationInfo(0x2000, "mini2g"),
-    "nano1g":   GenerationInfo(0x4000, "nano1g"),
+IPOD_MODELS: dict[str, ModelInfo] = {
+    "1g":       ModelInfo(0x2000, "1g"),
+    "2g":       ModelInfo(0x2000, "2g"),
+    "3g":       ModelInfo(0x2000, "3g"),
+    "4g_mono":  ModelInfo(0x2000, "4g_mono"),
+    "4g_photo": ModelInfo(0x2000, "4g_photo"),
+    "4g_color": ModelInfo(0x2000, "4g_color"),
+    "5g":       ModelInfo(0x4000, "5g"),
+    "mini1g":   ModelInfo(0x2000, "mini1g"),
+    "mini2g":   ModelInfo(0x2000, "mini2g"),
+    "nano1g":   ModelInfo(0x4000, "nano1g"),
 }
 
-# A few convenience aliases so common ways of typing a generation still work.
-_GENERATION_ALIASES = {
+# A few convenience aliases so common ways of typing a model still work.
+_MODEL_ALIASES = {
     "1": "1g", "gen1": "1g",
     "2": "2g", "gen2": "2g",
     "3": "3g", "gen3": "3g",
@@ -332,16 +329,16 @@ _GENERATION_ALIASES = {
 }
 
 
-def resolve_generation(name: str) -> GenerationInfo:
-    """Looks up a generation string, case/whitespace/punctuation
+def resolve_model(name: str) -> ModelInfo:
+    """Looks up a model string, case/whitespace/punctuation
     insensitively, with a helpful error listing valid names if it
     doesn't match anything known."""
     key = name.strip().lower().replace(" ", "_").replace("-", "_")
-    key = _GENERATION_ALIASES.get(key, key)
-    if key not in IPOD_GENERATIONS:
-        valid = ", ".join(sorted(set(IPOD_GENERATIONS) | set(_GENERATION_ALIASES)))
-        raise ValueError(f"unknown iPod generation {name!r}. Valid options: {valid}")
-    return IPOD_GENERATIONS[key]
+    key = _MODEL_ALIASES.get(key, key)
+    if key not in IPOD_MODELS:
+        valid = ", ".join(sorted(set(IPOD_MODELS) | set(_MODEL_ALIASES)))
+        raise ValueError(f"unknown iPod model {name!r}. Valid options: {valid}")
+    return IPOD_MODELS[key]
 
 
 # --------------------------------------------------------------------------
@@ -520,39 +517,37 @@ class FirmwareImageEntry:
 
 @dataclass
 class FirmwareImage:
-    """Represents a parsed iPod firmware partition / Firmware file."""
+    """Represents a parsed iPod Firmware file. The firmware header must
+    sit at the very start of the file (header magic at +0x100); anything
+    else is rejected as invalid."""
     buf: bytes
-    partition_base: int
     fwoffset: int
     version: int
     images: list[FirmwareImageEntry]
 
     @classmethod
-    def load(cls, path: str, partition_base: int = 0) -> "FirmwareImage":
+    def load(cls, path: str) -> "FirmwareImage":
         with open(path, "rb") as f:
             buf = f.read()
-        return cls.from_bytes(buf, partition_base=partition_base)
+        return cls.from_bytes(buf)
 
     @classmethod
-    def from_bytes(cls, buf: bytes, partition_base: int = 0) -> "FirmwareImage":
-        base = partition_base
-        if len(buf) < base + 0x110:
+    def from_bytes(cls, buf: bytes) -> "FirmwareImage":
+        if len(buf) < 0x110:
             raise ValueError("file too small to contain a firmware header")
 
-        magic = buf[base + HEADER_MAGIC_OFFSET: base + HEADER_MAGIC_OFFSET + 4]
+        magic = buf[HEADER_MAGIC_OFFSET: HEADER_MAGIC_OFFSET + 4]
         if magic != HEADER_MAGIC:
             raise ValueError(
-                f"no firmware header found at offset 0x{base:x} "
-                f"(expected magic {HEADER_MAGIC!r}, got {magic!r}). "
-                "This doesn't look like a firmware partition / Firmware "
-                "file - note a raw bootloader/NOR ROM dump normally does "
-                "NOT contain this header; it lives in the firmware "
-                "partition on disk instead."
+                f"not a valid Firmware file: expected header magic {HEADER_MAGIC!r} "
+                f"at offset 0x{HEADER_MAGIC_OFFSET:x}, got {magic!r}. Note a raw "
+                "bootloader/NOR ROM dump normally does NOT contain this header; "
+                "it lives in the firmware partition on disk instead."
             )
 
-        dir_ptr = struct.unpack_from("<I", buf, base + DIR_POINTER_OFFSET)[0]
+        dir_ptr = struct.unpack_from("<I", buf, DIR_POINTER_OFFSET)[0]
         diroffset = dir_ptr + DIR_POINTER_ADDEND
-        version = struct.unpack_from("<H", buf, base + DIR_VERSION_OFFSET)[0]
+        version = struct.unpack_from("<H", buf, DIR_VERSION_OFFSET)[0]
 
         firmware_offset = 0
         if version == 0:
@@ -560,7 +555,7 @@ class FirmwareImage:
             firmware_offset = dir_ptr
 
         images: list[FirmwareImageEntry] = []
-        pos = base + diroffset
+        pos = diroffset
         while pos + DIR_ENTRY_SIZE <= len(buf) and len(images) < 10:
             marker = buf[pos:pos + DIR_ENTRY_MARKER_SIZE]
             if marker not in VALID_ENTRY_MARKERS:
@@ -601,12 +596,11 @@ class FirmwareImage:
             raise ValueError("firmware header found, but no valid directory entries after it")
 
         if len(images) > 1 and version == 3:
-            fwoffset = base + SECTOR_SIZE
+            fwoffset = SECTOR_SIZE
         else:
-            fwoffset = base
+            fwoffset = 0
 
-        fw = cls(buf=buf, partition_base=base, fwoffset=fwoffset,
-                 version=version, images=images)
+        fw = cls(buf=buf, fwoffset=fwoffset, version=version, images=images)
         for img in images:
             img._fw = fw
         return fw
@@ -806,8 +800,8 @@ def get_flash_parts(fw: "FirmwareImage") -> tuple[list[FwUpPart], str]:
 
 def combine_fwup_parts(
     parts: list[FwUpPart],
+    model: str,
     pad_pattern: bytes = FLASH_PAD_PATTERN,
-    generation: Optional[str] = None,
 ) -> tuple[bytes, int, list[str]]:
     """Builds one flat buffer spanning every part's [dest_offset,
     last_addr] range, filling anything not covered by a part with a
@@ -816,19 +810,17 @@ def combine_fwup_parts(
     Later parts (later in `parts` order) overwrite earlier ones if
     ranges happen to overlap.
 
-    If `generation` is given (e.g. "3g", "4g_color", "5g", "mini1",
-    "nano1", ...), looks up its hardcoded gfCS-insertion offset
-    (IPOD_GENERATIONS) and, only if that GFCS_REGION_SIZE-byte region is
-    currently entirely unpadded-filler (i.e. not already covered by a
-    real FwUp/flsh part), overwrites it with that generation's
-    hardcoded "gfCS"/"SCfg" device-info struct (GFCS_STRUCTS) if one has
-    been captured for it yet.
+    `model` (e.g. "3g", "4g_color", "5g", "mini1g", "nano1g", ...) is
+    required: its hardcoded gfCS-insertion offset (IPOD_MODELS) is looked
+    up and, only if that GFCS_REGION_SIZE-byte region is entirely
+    pad-filler (i.e. not already covered by a real FwUp/flsh part), it is
+    overwritten with that model's hardcoded "gfCS"/"SCfg" device-info
+    struct (GFCS_STRUCTS), if one has been captured for it yet.
 
     Returns (buffer, base_offset, notes) where base_offset is the
     lowest dest_offset among all parts (the address the buffer's byte 0
     corresponds to), and notes is a list of human-readable strings
-    describing what the generation-handling step did (empty if
-    `generation` was not given).
+    describing what the gfCS-insertion step did.
     """
     if not parts:
         raise ValueError("no parts to combine")
@@ -847,45 +839,356 @@ def combine_fwup_parts(
         buf[rel_start:rel_start + p.payload_len] = p.payload()
 
     notes: list[str] = []
-    if generation is not None:
-        info = resolve_generation(generation)  # raises ValueError if unknown
-        offset = info.offset
-        rel = offset - base
+    info = resolve_model(model)  # raises ValueError if unknown
+    offset = info.offset
+    rel = offset - base
 
-        if rel < 0 or rel + GFCS_REGION_SIZE > len(buf):
+    if rel < 0 or rel + GFCS_REGION_SIZE > len(buf):
+        notes.append(
+            f"model {model!r}: gfCS region 0x{offset:x}-"
+            f"0x{offset + GFCS_REGION_SIZE - 1:x} is outside the "
+            f"combined range 0x{base:x}-0x{base + size - 1:x} - skipped")
+    else:
+        region = bytes(buf[rel:rel + GFCS_REGION_SIZE])
+        expected_pad = (pad_pattern * ((GFCS_REGION_SIZE // len(pad_pattern)) + 1))[:GFCS_REGION_SIZE]
+        if region != expected_pad:
             notes.append(
-                f"generation {generation!r}: gfCS region 0x{offset:x}-"
-                f"0x{offset + GFCS_REGION_SIZE - 1:x} is outside the "
-                f"combined range 0x{base:x}-0x{base + size - 1:x} - skipped")
+                f"model {model!r}: region 0x{offset:x}-"
+                f"0x{offset + GFCS_REGION_SIZE - 1:x} is already covered "
+                f"by real flash-part data - not overwritten")
+        elif info.gfcs is None:
+            notes.append(
+                f"model {model!r}: no gfCS struct captured for "
+                f"this model yet - region left padded (add it to "
+                f"GFCS_STRUCTS/IPOD_MODELS once available)")
         else:
-            region = bytes(buf[rel:rel + GFCS_REGION_SIZE])
-            expected_pad = (pad_pattern * ((GFCS_REGION_SIZE // len(pad_pattern)) + 1))[:GFCS_REGION_SIZE]
-            if region != expected_pad:
-                notes.append(
-                    f"generation {generation!r}: region 0x{offset:x}-"
-                    f"0x{offset + GFCS_REGION_SIZE - 1:x} is already covered "
-                    f"by real flash-part data - not overwritten")
-            elif info.gfcs is None:
-                notes.append(
-                    f"generation {generation!r}: no gfCS struct captured for "
-                    f"this generation yet - region left padded (add it to "
-                    f"GFCS_STRUCTS/IPOD_GENERATIONS once available)")
-            else:
-                struct_bytes = GFCS_STRUCTS[info.gfcs]
-                buf[rel:rel + len(struct_bytes)] = struct_bytes
-                notes.append(
-                    f"generation {generation!r}: inserted gfCS struct "
-                    f"{info.gfcs!r} at 0x{offset:x} ({len(struct_bytes)} bytes)")
+            struct_bytes = GFCS_STRUCTS[info.gfcs]
+            buf[rel:rel + len(struct_bytes)] = struct_bytes
+            notes.append(
+                f"model {model!r}: inserted gfCS struct "
+                f"{info.gfcs!r} at 0x{offset:x} ({len(struct_bytes)} bytes)")
+
 
     return bytes(buf), base, notes
 
 
 # --------------------------------------------------------------------------
-# CLI - pipeline style: every flag is independent and they can all be
-# combined in a single invocation, e.g.:
-#   ipod_firmware_tool.py -i Firmware-5_4_2.1 -l -a -o extracted/
-#   ipod_firmware_tool.py -i Firmware-5_4_2.1 -x AUPD aupd_raw.bin -d AUPD aupd_dec.bin
+# HDD image building - pure Python (no dd / fdisk / mkdosfs): MBR or APM
+# partition table, firmware partition, FAT32 data partition.
+#
+#   firmware dir version 0   -> APM only, firmware at block 4 (0x800)
+#   firmware dir version 2/3 -> APM or MBR, firmware at block 63
 # --------------------------------------------------------------------------
+
+HDD_FW_BLOCK_V0 = 4
+HDD_FW_BLOCK_V23 = 63
+HDD_DEFAULT_SIZE_MIB = 90
+HDD_DEFAULT_FW_SECTORS = 61440        # 30 MiB, as in the old shell scripts
+HDD_FW_ROUND_SECTORS = 2048           # a larger firmware partition is rounded up to 1 MiB
+MBR_DISK_SIGNATURE = 0x04206969
+MBR_TYPE_FIRMWARE = 0x00
+MBR_TYPE_FAT32_LBA = 0x0B
+APM_FW_TYPE = "Apple_MDFW"
+APM_FAT_TYPE = "DOS_FAT_32"
+HDD_PATCH_DIR_OFFSETS = (0x4000, 0x4200)   # firmware-relative directory candidates
+
+FAT32_RESERVED_SECTORS = 32
+FAT32_MIN_CLUSTERS = 65525
+FAT32_MAX_CLUSTERS = 0x0FFFFFF4
+FAT32_VOLUME_ID = 0x4D65644F          # the constant mkfs.fat --invariant uses
+FAT32_GEOM_SECTORS = 63
+FAT32_GEOM_HEADS = 255
+
+
+def hdd_firmware_block(fw: "FirmwareImage", scheme: str) -> int:
+    """Block (512-byte sector) at which the firmware partition must start
+    for this firmware file + partition scheme. Raises ValueError for
+    unsupported combinations."""
+    if scheme not in ("mbr", "apm"):
+        raise ValueError(f"unknown partition scheme {scheme!r} (use 'mbr' or 'apm')")
+    if fw.version == 0:
+        if scheme != "apm":
+            raise ValueError("version-0 firmware only supports APM images")
+        ptr = struct.unpack_from("<I", fw.buf, DIR_POINTER_OFFSET)[0]
+        if ptr != HDD_FW_BLOCK_V0 * SECTOR_SIZE:
+            raise ValueError(
+                f"version-0 firmware header offset is 0x{ptr:x}, expected "
+                f"0x{HDD_FW_BLOCK_V0 * SECTOR_SIZE:x} - can't place it in an image")
+        return HDD_FW_BLOCK_V0
+    if fw.version in (2, 3):
+        return HDD_FW_BLOCK_V23
+    raise ValueError(f"unsupported firmware directory version {fw.version}")
+
+
+def _lba_to_chs(lba: int) -> bytes:
+    cyl = lba // (FAT32_GEOM_HEADS * FAT32_GEOM_SECTORS)
+    head = (lba // FAT32_GEOM_SECTORS) % FAT32_GEOM_HEADS
+    sec = lba % FAT32_GEOM_SECTORS + 1
+    if cyl > 1023:
+        cyl, head, sec = 1023, FAT32_GEOM_HEADS - 1, FAT32_GEOM_SECTORS
+    return bytes([head, sec | ((cyl >> 8) & 3) << 6, cyl & 0xFF])
+
+
+def _write_mbr(f, fw_start, fw_sectors, fat_start, fat_sectors) -> None:
+    mbr = bytearray(SECTOR_SIZE)
+    struct.pack_into("<I", mbr, 440, MBR_DISK_SIGNATURE)
+    for i, (status, ptype, start, size) in enumerate((
+            (0x80, MBR_TYPE_FIRMWARE, fw_start, fw_sectors),
+            (0x00, MBR_TYPE_FAT32_LBA, fat_start, fat_sectors))):
+        e = bytearray(16)
+        e[0] = status
+        e[1:4] = _lba_to_chs(start)
+        e[4] = ptype
+        e[5:8] = _lba_to_chs(start + size - 1)
+        struct.pack_into("<II", e, 8, start, size)
+        mbr[446 + i * 16: 446 + (i + 1) * 16] = e
+    mbr[510:512] = b"\x55\xAA"
+    f.seek(0)
+    f.write(mbr)
+
+
+def _write_apm(f, total_sectors, fw_start, fw_sectors, fat_start, fat_sectors) -> None:
+    ddm = bytearray(SECTOR_SIZE)
+    ddm[0:2] = b"ER"
+    struct.pack_into(">H", ddm, 2, SECTOR_SIZE)
+    struct.pack_into(">I", ddm, 4, total_sectors)
+    f.seek(0)
+    f.write(ddm)
+
+    def entry(start, size, name, ptype):
+        p = bytearray(SECTOR_SIZE)
+        p[0:2] = b"PM"
+        struct.pack_into(">I", p, 4, 3)            # number of map entries
+        struct.pack_into(">I", p, 8, start)
+        struct.pack_into(">I", p, 12, size)
+        p[16:48] = name.encode().ljust(32, b"\0")
+        p[48:80] = ptype.encode().ljust(32, b"\0")
+        struct.pack_into(">I", p, 88, 0x33)         # status flags
+        return p
+
+    # the partition-map entry itself spans block 1 up to the firmware start
+    for i, e in enumerate((
+            entry(1, fw_start - 1, "Apple", "Apple_partition_map"),
+            entry(fw_start, fw_sectors, "Firmware", APM_FW_TYPE),
+            entry(fat_start, fat_sectors, "iPod", APM_FAT_TYPE))):
+        f.seek((1 + i) * SECTOR_SIZE)
+        f.write(e)
+
+
+def _fat32_params(total_sectors: int) -> tuple[int, int, int]:
+    """Returns (sectors_per_cluster, fat_size_sectors, cluster_count)."""
+    if total_sectors <= 532480:        # <= 260 MB
+        spc = 1
+    elif total_sectors <= 16777216:    # <= 8 GB
+        spc = 8
+    elif total_sectors <= 33554432:    # <= 16 GB
+        spc = 16
+    elif total_sectors <= 67108864:    # <= 32 GB
+        spc = 32
+    else:
+        spc = 64
+    while spc >= 1:
+        tmp1 = total_sectors - FAT32_RESERVED_SECTORS
+        tmp2 = (256 * spc + 2) // 2
+        fat_size = -(-tmp1 // tmp2)
+        clusters = (tmp1 - 2 * fat_size) // spc
+        if clusters >= FAT32_MIN_CLUSTERS:
+            if clusters > FAT32_MAX_CLUSTERS:
+                break
+            return spc, fat_size, clusters
+        spc //= 2
+    raise ValueError(
+        f"a {total_sectors * SECTOR_SIZE / 2**20:.1f} MiB partition is too small "
+        f"(or too large) for a valid FAT32 volume - use a different --hdd-size")
+
+
+def _format_fat32(f, start_sector: int, total_sectors: int) -> None:
+    """Writes an empty FAT32 filesystem into the open file at
+    `start_sector`. Only the metadata sectors are written; everything else
+    stays zero (the file is created sparse where the OS supports it)."""
+    spc, fat_size, clusters = _fat32_params(total_sectors)
+    base = start_sector * SECTOR_SIZE
+
+    boot = bytearray(SECTOR_SIZE)
+    boot[0:3] = b"\xEB\x58\x90"
+    boot[3:11] = b"mkfs.fat"
+    struct.pack_into("<H", boot, 11, SECTOR_SIZE)
+    boot[13] = spc
+    struct.pack_into("<H", boot, 14, FAT32_RESERVED_SECTORS)
+    boot[16] = 2                                      # number of FATs
+    boot[21] = 0xF8                                   # media descriptor
+    struct.pack_into("<H", boot, 24, FAT32_GEOM_SECTORS)
+    struct.pack_into("<H", boot, 26, FAT32_GEOM_HEADS)
+    struct.pack_into("<I", boot, 28, start_sector)    # hidden sectors
+    struct.pack_into("<I", boot, 32, total_sectors)
+    struct.pack_into("<I", boot, 36, fat_size)
+    struct.pack_into("<I", boot, 44, 2)               # root directory cluster
+    struct.pack_into("<H", boot, 48, 1)               # FSInfo sector
+    struct.pack_into("<H", boot, 50, 6)               # backup boot sector
+    boot[64] = 0x80                                   # drive number
+    boot[66] = 0x29                                   # extended boot signature
+    struct.pack_into("<I", boot, 67, FAT32_VOLUME_ID)
+    boot[71:82] = b"NO NAME    "
+    boot[82:90] = b"FAT32   "
+    boot[510:512] = b"\x55\xAA"
+
+    fsinfo = bytearray(SECTOR_SIZE)
+    struct.pack_into("<I", fsinfo, 0, 0x41615252)
+    struct.pack_into("<I", fsinfo, 484, 0x61417272)
+    struct.pack_into("<I", fsinfo, 488, clusters - 1)  # free clusters (root uses one)
+    struct.pack_into("<I", fsinfo, 492, 3)             # next free cluster hint
+    struct.pack_into("<I", fsinfo, 508, 0xAA550000)
+
+    for sector, data in ((0, boot), (1, fsinfo), (6, boot), (7, fsinfo)):
+        f.seek(base + sector * SECTOR_SIZE)
+        f.write(data)
+
+    fat_head = bytearray(SECTOR_SIZE)
+    struct.pack_into("<III", fat_head, 0, 0x0FFFFFF8, 0x0FFFFFFF, 0x0FFFFFFF)
+    for n in range(2):
+        f.seek(base + (FAT32_RESERVED_SECTORS + n * fat_size) * SECTOR_SIZE)
+        f.write(fat_head)
+    # root directory cluster (cluster 2) is left zeroed = empty
+
+
+@dataclass
+class HddLayout:
+    scheme: str
+    total_sectors: int
+    fw_start: int
+    fw_sectors: int
+    fat_start: int
+    fat_sectors: int
+
+
+def hdd_layout(fw: "FirmwareImage", scheme: str, size_mib: int) -> HddLayout:
+    fw_start = hdd_firmware_block(fw, scheme)
+    need = -(-len(fw.buf) // SECTOR_SIZE)
+    fw_sectors = HDD_DEFAULT_FW_SECTORS
+    if need > fw_sectors:
+        fw_sectors = -(-need // HDD_FW_ROUND_SECTORS) * HDD_FW_ROUND_SECTORS
+    total = size_mib * 2048
+    fat_start = fw_start + fw_sectors
+    fat_sectors = total - fat_start
+    if fat_sectors <= 0:
+        raise ValueError(f"--hdd-size {size_mib} MiB is too small for the firmware partition")
+    _fat32_params(fat_sectors)    # validates the size early
+    return HddLayout(scheme, total, fw_start, fw_sectors, fat_start, fat_sectors)
+
+
+def locate_hdd_firmware(path: str, scheme: str) -> tuple[int, int]:
+    """Reads the partition table of an image and returns (byte_offset,
+    byte_length) of the firmware partition: MBR partition 1, or the
+    Apple_MDFW entry of an APM."""
+    with open(path, "rb") as f:
+        sec0 = f.read(SECTOR_SIZE)
+        if scheme == "mbr":
+            if sec0[510:512] != b"\x55\xAA":
+                raise ValueError("no MBR signature found in the image")
+            start, size = struct.unpack_from("<II", sec0, 446 + 8)
+            if start == 0 or size == 0:
+                raise ValueError("MBR partition 1 is empty")
+            return start * SECTOR_SIZE, size * SECTOR_SIZE
+        if sec0[0:2] != b"ER":
+            raise ValueError("no Apple driver descriptor map found in the image")
+        f.seek(SECTOR_SIZE)
+        first = f.read(SECTOR_SIZE)
+        if first[0:2] != b"PM":
+            raise ValueError("no Apple partition map found in the image")
+        count = struct.unpack_from(">I", first, 4)[0]
+        for i in range(count):
+            f.seek((1 + i) * SECTOR_SIZE)
+            e = f.read(SECTOR_SIZE)
+            if e[0:2] == b"PM" and e[48:80].rstrip(b"\0").decode("ascii", "replace") == APM_FW_TYPE:
+                start, size = struct.unpack_from(">II", e, 8)
+                return start * SECTOR_SIZE, size * SECTOR_SIZE
+        raise ValueError(f"no {APM_FW_TYPE} partition found in the partition map")
+
+
+def patch_hdd_aupd_ids(path: str, fw_offset: int) -> list[str]:
+    """Patches the *image* (never the input firmware file): in every
+    firmware directory found at fw_offset+0x4000 and/or +0x4200, sets the
+    AUPD entry's id field to 1. Returns human-readable notes; raises
+    ValueError if no AUPD entry could be patched."""
+    notes: list[str] = []
+    patched = 0
+    with open(path, "r+b") as f:
+        for cand in HDD_PATCH_DIR_OFFSETS:
+            pos = fw_offset + cand
+            f.seek(pos)
+            raw = f.read(DIR_ENTRY_SIZE * 10)
+            count = 0
+            aupd_idx = None
+            while (count + 1) * DIR_ENTRY_SIZE <= len(raw) and count < 10:
+                e = raw[count * DIR_ENTRY_SIZE:(count + 1) * DIR_ENTRY_SIZE]
+                if e[0:4] not in VALID_ENTRY_MARKERS or e[4:8] not in TAG_NAMES:
+                    break
+                if TAG_NAMES[e[4:8]] == "AUPD" and aupd_idx is None:
+                    aupd_idx = count
+                count += 1
+            if count == 0:
+                notes.append(f"no firmware directory at firmware+0x{cand:x}")
+                continue
+            if aupd_idx is None:
+                notes.append(f"directory at firmware+0x{cand:x} has no AUPD entry")
+                continue
+            id_pos = pos + aupd_idx * DIR_ENTRY_SIZE + 8
+            f.seek(id_pos)
+            old = struct.unpack("<I", f.read(4))[0]
+            f.seek(id_pos)
+            f.write(struct.pack("<I", 1))
+            patched += 1
+            notes.append(f"directory at firmware+0x{cand:x}: AUPD id 0x{old:08x} -> 0x00000001")
+    if not patched:
+        raise ValueError("no firmware directory with an AUPD entry found in the image: "
+                         + "; ".join(notes))
+    return notes
+
+
+def build_hdd_image(fw: "FirmwareImage", scheme: str, out_path: str,
+                    size_mib: int = HDD_DEFAULT_SIZE_MIB) -> tuple[HddLayout, list[str]]:
+    """Builds a complete HDD image (partition table + firmware partition +
+    empty FAT32), then patches the AUPD id inside the image. Returns
+    (layout, notes)."""
+    scheme = scheme.lower()
+    lay = hdd_layout(fw, scheme, size_mib)
+
+    out_dir = os.path.dirname(os.path.abspath(out_path))
+    if out_dir:
+        os.makedirs(out_dir, exist_ok=True)
+    with open(out_path, "wb") as f:
+        f.truncate(lay.total_sectors * SECTOR_SIZE)
+        if scheme == "mbr":
+            _write_mbr(f, lay.fw_start, lay.fw_sectors, lay.fat_start, lay.fat_sectors)
+        else:
+            _write_apm(f, lay.total_sectors, lay.fw_start, lay.fw_sectors,
+                       lay.fat_start, lay.fat_sectors)
+        f.seek(lay.fw_start * SECTOR_SIZE)
+        f.write(fw.buf)
+        _format_fat32(f, lay.fat_start, lay.fat_sectors)
+
+    # find the firmware again through the partition table we just wrote
+    fw_off, _ = locate_hdd_firmware(out_path, scheme)
+    notes = patch_hdd_aupd_ids(out_path, fw_off)
+    return lay, notes
+
+
+# --------------------------------------------------------------------------
+# CLI
+# --------------------------------------------------------------------------
+
+_FORCE = False
+
+
+class OutputExistsError(Exception):
+    pass
+
+
+def _check_output(path: str) -> None:
+    """Refuses to clobber an existing file unless --force was given."""
+    if os.path.exists(path) and not _FORCE:
+        raise OutputExistsError(f"{path!r} already exists - pass --force to overwrite it")
+
 
 def _print_listing(fw: "FirmwareImage") -> None:
     print(f"fwoffset=0x{fw.fwoffset:x}  directory version={fw.version}  "
@@ -900,6 +1203,14 @@ def _print_listing(fw: "FirmwareImage") -> None:
               f"len={img.length:>9,d} bytes  chksum=0x{img.checksum:08x}  [{status}]")
 
 
+def _write_file(path: str, data: bytes) -> None:
+    out_dir = os.path.dirname(os.path.abspath(path))
+    if out_dir:
+        os.makedirs(out_dir, exist_ok=True)
+    with open(path, "wb") as f:
+        f.write(data)
+
+
 def _write_image(img: "FirmwareImageEntry", out_path: str, decoded: bool) -> bool:
     """Writes either the raw on-disk bytes (decoded=False) or the fully
     decoded bytes (decoded=True, transparently RC4-decrypting AUPD on
@@ -910,16 +1221,12 @@ def _write_image(img: "FirmwareImageEntry", out_path: str, decoded: bool) -> boo
         print(f"[!] {img.name}: failed to {'decode' if decoded else 'read'} - {e}")
         return False
 
-    out_dir = os.path.dirname(os.path.abspath(out_path))
-    if out_dir:
-        os.makedirs(out_dir, exist_ok=True)
-    with open(out_path, "wb") as f:
-        f.write(data)
+    _write_file(out_path, data)
 
     calc = additive_checksum(data)
     if decoded:
         status = "OK" if calc == img.checksum else "MISMATCH"
-        print(f"[+] {img.name} ({'decoded' if decoded else 'raw'}) -> {out_path} "
+        print(f"[+] {img.name} (decoded) -> {out_path} "
               f"({len(data):,} bytes)  checksum: calc=0x{calc:08x} "
               f"expected=0x{img.checksum:08x} [{status}]")
     else:
@@ -943,77 +1250,117 @@ def _find_image_or_die(fw: "FirmwareImage", name: str) -> "FirmwareImageEntry":
     return img
 
 
+_HELP_EXAMPLES = """\
+examples:
+  %(prog)s -i Firmware-5.4.2.1 -l
+  %(prog)s -i Firmware-5.4.2.1 -m 4g -f 4g_flash.bin
+  %(prog)s -i Firmware-5.4.2.1 -d mbr 4g_hdd.bin
+  %(prog)s -i Firmware-5.4.2.1 -m 4g -f 4g_flash.bin -d mbr 4g_hdd.bin
+  %(prog)s -i Firmware-5.4.2.1 --extract-decoded AUPD aupd.bin
+
+Output files go to the current directory; an existing file is an error
+unless --force is given. Steps run in a fixed order, whatever the order
+of the flags."""
+
+
 def build_arg_parser() -> argparse.ArgumentParser:
     ap = argparse.ArgumentParser(
-        description=__doc__,
+        description="Inspect and rebuild iPod firmware: list/extract images, "
+                    "build the NOR flash image and HDD (MBR/APM) images.",
+        epilog=_HELP_EXAMPLES,
         formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("-i", "--input", required=True, dest="firmware",
-                     help="Input Firmware file / firmware partition / disk image")
-    ap.add_argument("-l", "--list", action="store_true",
-                     help="List the images found in the firmware directory")
-    ap.add_argument("-a", "--extract-all", action="store_true",
-                     help="Extract every image, decoded (decrypting AUPD when needed), "
-                          "into --out-dir")
-    ap.add_argument("-x", "--extract-raw", action="append", nargs=2,
-                     metavar=("IMAGE", "OUTPUT_FILE"),
-                     help="Extract IMAGE (e.g. AUPD or OSOS) exactly as stored on disk "
-                          "(still RC4-obfuscated for AUPD on version 3, plain on version 2). "
-                          "Can be given more than once.")
-    ap.add_argument("-d", "--extract-decoded", action="append", nargs=2,
-                     metavar=("IMAGE", "OUTPUT_FILE"),
-                     help="Extract IMAGE fully decoded (AUPD is RC4-decrypted on version 3, "
-                          "left as-is on version 2; every other image is unaffected). "
-                          "Can be given more than once.")
-    ap.add_argument("-o", "--out-dir", default="extracted",
-                     help="Output directory for -a/--extract-all (default: ./extracted)")
-    ap.add_argument("-p", "--extract-flash-parts", action="store_true",
-                     help="Find every 'FwUp'/'flsh' part inside the (decoded) AUPD image "
-                          "and extract each one independently into --out-dir, named "
-                          "'<input>_<destOffset>-<lastAddr>.bin'")
-    ap.add_argument("-c", "--combine-flash", nargs="?", const="", default=None,
+    ap.add_argument("-i", "--input", required=True, dest="firmware", metavar="FILE",
+                     help="input Firmware file")
+    ap.add_argument("-m", "--model", metavar="MODEL",
+                     help="iPod model, e.g. 1g 2g 3g 4g 4g_photo 4g_color 5g mini1g mini2g "
+                          "nano1g (required with -f)")
+    ap.add_argument("-f", "--build-flash", nargs="?", const="", default=None,
                      metavar="OUTPUT_FILE",
-                     help="Combine every 'FwUp'/'flsh' part found inside the (decoded) "
-                          "AUPD image into a single flat file spanning their full address "
-                          "range, padding any uncovered region with a repeating 0xFF 0xFF "
-                          "pattern. Default output name: '<input>_flash.bin' in --out-dir; "
-                          "pass a path to override.")
-    ap.add_argument("-g", "--generation",
-                     help="iPod generation (e.g. 3g, 4g, 4g_color, 5g, mini1, mini2, nano1) "
-                          "used with -c/--combine-flash: if the generation's known gfCS "
-                          "insertion region isn't already covered by a real flash part, "
-                          "fills it in with that generation's hardcoded gfCS/SCfg struct.")
-    ap.add_argument("--partition-base", type=lambda x: int(x, 0), default=0,
-                     help="Offset within --input where the firmware partition header starts")
+                     help="rebuild the NOR flash image from the AUPD (needs -m; "
+                          "default name: <input>_flash.bin)")
+    ap.add_argument("-d", "--build-hdd", nargs="+", default=None,
+                     metavar=("{mbr,apm}", "OUTPUT_FILE"),
+                     help="build an HDD image with the firmware and an empty FAT32 "
+                          "partition (default name: <input>_<type>.img). "
+                          "v0 firmware: apm only; v2/v3: mbr or apm")
+    ap.add_argument("-l", "--list", action="store_true",
+                     help="list the images found in the firmware directory")
+    ap.add_argument("--force", action="store_true",
+                     help="overwrite existing output files")
+
+    more = ap.add_argument_group("less frequent options")
+    more.add_argument("--hdd-size", type=int, default=HDD_DEFAULT_SIZE_MIB, metavar="MiB",
+                      help=f"total HDD image size for -d (default: {HDD_DEFAULT_SIZE_MIB})")
+    more.add_argument("--extract-all", action="store_true",
+                      help="extract every image, decoded, as <input>_<name>.bin")
+    more.add_argument("--extract-raw", action="append", nargs=2,
+                      metavar=("IMAGE", "OUTPUT_FILE"),
+                      help="extract IMAGE exactly as stored on disk (repeatable)")
+    more.add_argument("--extract-decoded", action="append", nargs=2,
+                      metavar=("IMAGE", "OUTPUT_FILE"),
+                      help="extract IMAGE decoded, i.e. AUPD RC4-decrypted on v3 (repeatable)")
+    more.add_argument("--extract-flash-parts", action="store_true",
+                      help="extract each flash part of the AUPD separately, as "
+                           "<input>_<destOffset>-<lastAddr>.bin")
     return ap
 
 
-def _get_decoded_aupd_or_die(fw: "FirmwareImage") -> bytes:
-    img = fw.find("AUPD")
-    if img is None:
-        print("[!] This firmware has no AUPD image.")
-        sys.exit(1)
-    try:
-        return img.decoded_data()
-    except Exception as e:
-        print(f"[!] Failed to decode AUPD: {e}")
-        sys.exit(1)
-
-
 def main():
-    args = build_arg_parser().parse_args()
+    global _FORCE
+    ap = build_arg_parser()
+    args = ap.parse_args()
+    _FORCE = args.force
 
     if not (args.list or args.extract_all or args.extract_raw or args.extract_decoded
-            or args.extract_flash_parts or args.combine_flash is not None):
-        build_arg_parser().error(
-            "nothing to do - pass at least one of -l, -a, -x, -d, -p, -c")
+            or args.extract_flash_parts or args.build_flash is not None
+            or args.build_hdd):
+        ap.error("nothing to do - pass at least one of -l, -f, -d, "
+                 "--extract-all, --extract-raw, --extract-decoded, --extract-flash-parts")
+
+    if args.build_flash is not None:
+        if not args.model:
+            ap.error("-f/--build-flash requires -m/--model")
+        try:
+            resolve_model(args.model)
+        except ValueError as e:
+            ap.error(str(e))
+
+    hdd_type = hdd_out = None
+    if args.build_hdd:
+        if len(args.build_hdd) > 2:
+            ap.error("-d/--build-hdd takes a type (mbr or apm) and an optional output file")
+        hdd_type = args.build_hdd[0].lower()
+        if hdd_type not in ("mbr", "apm"):
+            ap.error(f"-d/--build-hdd: invalid type {args.build_hdd[0]!r} (choose 'mbr' or 'apm')")
+        if len(args.build_hdd) == 2:
+            hdd_out = args.build_hdd[1]
 
     try:
-        fw = FirmwareImage.load(args.firmware, partition_base=args.partition_base)
+        fw = FirmwareImage.load(args.firmware)
     except Exception as e:
         print(f"[!] Failed to load {args.firmware!r}: {e}")
         sys.exit(1)
 
     stem = os.path.basename(args.firmware)
+    flash_out = None
+    if args.build_flash is not None:
+        flash_out = args.build_flash or f"{stem}_flash.bin"
+    if hdd_type and hdd_out is None:
+        hdd_out = f"{stem}_{hdd_type}.img"
+
+    # Refuse to overwrite anything before doing any work.
+    planned = []
+    if args.extract_all:
+        planned += [f"{stem}_{img.name.lower()}.bin" for img in fw.images]
+    planned += [p for _, p in (args.extract_raw or [])]
+    planned += [p for _, p in (args.extract_decoded or [])]
+    planned += [p for p in (flash_out, hdd_out) if p]
+    try:
+        for path in planned:
+            _check_output(path)
+    except OutputExistsError as e:
+        print(f"[!] {e}")
+        sys.exit(1)
 
     # Pipeline: run every requested step in a fixed, predictable order,
     # regardless of the order flags were given on the command line.
@@ -1021,18 +1368,14 @@ def main():
         _print_listing(fw)
 
     if args.extract_all:
-        os.makedirs(args.out_dir, exist_ok=True)
         for img in fw.images:
-            out_path = os.path.join(args.out_dir, f"{img.name.lower()}.bin")
-            _write_image(img, out_path, decoded=True)
+            _write_image(img, f"{stem}_{img.name.lower()}.bin", decoded=True)
 
     for image_name, out_path in (args.extract_raw or []):
-        img = _find_image_or_die(fw, image_name)
-        _write_image(img, out_path, decoded=False)
+        _write_image(_find_image_or_die(fw, image_name), out_path, decoded=False)
 
     for image_name, out_path in (args.extract_decoded or []):
-        img = _find_image_or_die(fw, image_name)
-        _write_image(img, out_path, decoded=True)
+        _write_image(_find_image_or_die(fw, image_name), out_path, decoded=True)
 
     if args.extract_flash_parts:
         parts, note = get_flash_parts(fw)
@@ -1041,41 +1384,48 @@ def main():
         if not parts:
             print("[!] No flash parts found inside AUPD.")
         else:
-            os.makedirs(args.out_dir, exist_ok=True)
             addr_width = max(5, len(f"{max(p.last_addr for p in parts):x}"))
+            outs = [p.suggested_filename(stem, addr_width) for p in parts]
+            try:
+                for path in outs:
+                    _check_output(path)
+            except OutputExistsError as e:
+                print(f"[!] {e}")
+                sys.exit(1)
             print(f"[*] Found {len(parts)} flash part(s) inside AUPD:")
-            for p in parts:
-                out_path = os.path.join(args.out_dir, p.suggested_filename(stem, addr_width))
-                with open(out_path, "wb") as f:
-                    f.write(p.payload())
-                print(f"    dest=0x{p.dest_offset:08x}  len=0x{p.payload_len:x}  "
-                      f"-> {out_path}")
+            for p, path in zip(parts, outs):
+                _write_file(path, p.payload())
+                print(f"    dest=0x{p.dest_offset:08x}  len=0x{p.payload_len:x}  -> {path}")
 
-    if args.combine_flash is not None:
+    if flash_out:
         parts, note = get_flash_parts(fw)
         if note:
             print(f"[*] {note}")
         if not parts:
-            print("[!] No flash parts found inside AUPD - nothing to combine.")
+            print("[!] No flash parts found inside AUPD - nothing to build.")
         else:
-            out_path = args.combine_flash or os.path.join(args.out_dir, f"{stem}_flash.bin")
-            out_dir = os.path.dirname(os.path.abspath(out_path))
-            if out_dir:
-                os.makedirs(out_dir, exist_ok=True)
-            try:
-                buf, base, notes = combine_fwup_parts(parts, generation=args.generation)
-            except ValueError as e:
-                print(f"[!] {e}")
-                sys.exit(1)
-            with open(out_path, "wb") as f:
-                f.write(buf)
+            buf, base, notes = combine_fwup_parts(parts, args.model)
+            _write_file(flash_out, buf)
             covered = sum(p.payload_len for p in parts)
-            print(f"[+] Combined {len(parts)} part(s) -> {out_path} "
+            print(f"[+] Built flash image from {len(parts)} part(s) -> {flash_out} "
                   f"({len(buf):,} bytes, base=0x{base:08x}, "
                   f"{covered:,} bytes covered, "
                   f"{len(buf) - covered:,} bytes padded with 0xFFFF)")
             for note in notes:
                 print(f"    {note}")
+
+    if hdd_type:
+        try:
+            lay, notes = build_hdd_image(fw, hdd_type, hdd_out, args.hdd_size)
+        except ValueError as e:
+            print(f"[!] Can't build HDD image: {e}")
+            sys.exit(1)
+        print(f"[+] {hdd_type.upper()} HDD image -> {hdd_out} "
+              f"({lay.total_sectors * SECTOR_SIZE:,} bytes)")
+        print(f"    firmware partition: block {lay.fw_start}, {lay.fw_sectors} sectors")
+        print(f"    FAT32 partition:    block {lay.fat_start}, {lay.fat_sectors} sectors")
+        for note in notes:
+            print(f"    {note}")
 
 
 if __name__ == "__main__":
