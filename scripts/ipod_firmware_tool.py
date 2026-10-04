@@ -883,13 +883,14 @@ def combine_fwup_parts(
 HDD_FW_BLOCK_V0 = 4
 HDD_FW_BLOCK_V23 = 63
 HDD_DEFAULT_SIZE_MIB = 90
-HDD_DEFAULT_FW_SECTORS = 61440        # 30 MiB, as in the old shell scripts
+HDD_DEFAULT_FW_SECTORS = 65536        # 30 MiB, as in the old shell scripts
 HDD_FW_ROUND_SECTORS = 2048           # a larger firmware partition is rounded up to 1 MiB
-MBR_DISK_SIGNATURE = 0x04206969
+MBR_DISK_SIGNATURE = 0x20202020
 MBR_TYPE_FIRMWARE = 0x00
 MBR_TYPE_FAT32_LBA = 0x0B
 APM_FW_TYPE = "Apple_MDFW"
 APM_FAT_TYPE = "DOS_FAT_32"
+APM_HFS_TYPE = "Apple_HFS"
 HDD_PATCH_DIR_OFFSETS = (0x4000, 0x4200)   # firmware-relative directory candidates
 
 FAT32_RESERVED_SECTORS = 32
@@ -929,12 +930,12 @@ def _lba_to_chs(lba: int) -> bytes:
     return bytes([head, sec | ((cyl >> 8) & 3) << 6, cyl & 0xFF])
 
 
-def _write_mbr(f, fw_start, fw_sectors, fat_start, fat_sectors) -> None:
+def _write_mbr(f, fw_start, fw_sectors, data_start, data_sectors) -> None:
     mbr = bytearray(SECTOR_SIZE)
     struct.pack_into("<I", mbr, 440, MBR_DISK_SIGNATURE)
     for i, (status, ptype, start, size) in enumerate((
             (0x80, MBR_TYPE_FIRMWARE, fw_start, fw_sectors),
-            (0x00, MBR_TYPE_FAT32_LBA, fat_start, fat_sectors))):
+            (0x00, MBR_TYPE_FAT32_LBA, data_start, data_sectors))):
         e = bytearray(16)
         e[0] = status
         e[1:4] = _lba_to_chs(start)
@@ -947,7 +948,7 @@ def _write_mbr(f, fw_start, fw_sectors, fat_start, fat_sectors) -> None:
     f.write(mbr)
 
 
-def _write_apm(f, total_sectors, fw_start, fw_sectors, fat_start, fat_sectors) -> None:
+def _write_apm(f, total_sectors, fw_start, fw_sectors, data_start, data_sectors) -> None:
     ddm = bytearray(SECTOR_SIZE)
     ddm[0:2] = b"ER"
     struct.pack_into(">H", ddm, 2, SECTOR_SIZE)
@@ -970,7 +971,7 @@ def _write_apm(f, total_sectors, fw_start, fw_sectors, fat_start, fat_sectors) -
     for i, e in enumerate((
             entry(1, fw_start - 1, "Apple", "Apple_partition_map"),
             entry(fw_start, fw_sectors, "Firmware", APM_FW_TYPE),
-            entry(fat_start, fat_sectors, "iPod", APM_FAT_TYPE))):
+            entry(data_start, data_sectors, "iPod", APM_HFS_TYPE))):
         f.seek((1 + i) * SECTOR_SIZE)
         f.write(e)
 
@@ -1028,7 +1029,7 @@ def _format_fat32(f, start_sector: int, total_sectors: int) -> None:
     boot[64] = 0x80                                   # drive number
     boot[66] = 0x29                                   # extended boot signature
     struct.pack_into("<I", boot, 67, FAT32_VOLUME_ID)
-    boot[71:82] = b"NO NAME    "
+    boot[71:82] = b"iPod MBR   "
     boot[82:90] = b"FAT32   "
     boot[510:512] = b"\x55\xAA"
 
@@ -1051,14 +1052,171 @@ def _format_fat32(f, start_sector: int, total_sectors: int) -> None:
     # root directory cluster (cluster 2) is left zeroed = empty
 
 
+# --------------------------------------------------------------------------
+# HFS+ (non-journaled) formatter - what Mac-formatted click-wheel iPods use.
+# Writes just enough structure for an empty, valid volume: boot blocks,
+# volume header (+ alternate copy), allocation bitmap, an empty extents
+# overflow B-tree and a catalog B-tree holding only the root folder.
+# All on-disk fields are big-endian.
+# --------------------------------------------------------------------------
+
+HFS_BLOCK_SIZE = 4096
+HFS_NODE_SIZE = 4096
+HFS_VOLUME_NAME = "iPod APM"
+HFS_CATALOG_NODES = 8            # 32 KiB initial catalog; the OS grows it on demand
+HFS_MIN_BLOCKS = 64
+HFS_MAC_EPOCH_OFFSET = 2082844800            # seconds from 1904-01-01 to 1970-01-01
+HFS_CREATE_DATE = 1003795200 + HFS_MAC_EPOCH_OFFSET   # 2001-10-23 00:00 UTC (fixed -> reproducible)
+HFS_VOLUME_UNIQUE_ID = 0x69506F6469506F64    # arbitrary fixed value stored in finderInfo[6..7]
+HFS_ROOT_PARENT_ID = 1
+HFS_ROOT_FOLDER_ID = 2
+HFS_FIRST_USER_ID = 16
+
+
+def _hfs_fork(logical_size: int, clump: int, start_block: int, block_count: int) -> bytes:
+    """An 80-byte HFSPlusForkData with a single extent."""
+    out = struct.pack(">QII", logical_size, clump, block_count)
+    out += struct.pack(">II", start_block, block_count) + bytes(7 * 8)
+    assert len(out) == 80
+    return out
+
+
+def _hfs_btree_header_node(node_size, tree_depth, root, leaf_records, first_leaf,
+                           last_leaf, max_key_len, total_nodes, used_nodes,
+                           clump, attributes) -> bytes:
+    node = bytearray(node_size)
+    struct.pack_into(">IIBBHH", node, 0, 0, 0, 1, 0, 3, 0)    # fLink bLink kind(header) height nRecs
+    struct.pack_into(">HIIIIHHIIHIBBI", node, 14,
+                     tree_depth, root, leaf_records, first_leaf, last_leaf,
+                     node_size, max_key_len, total_nodes, total_nodes - used_nodes,
+                     0, clump, 0, 0 if max_key_len == 10 else 0xCF, attributes)
+    # record 2 (map): one bit per node, MSB first
+    for n in range(used_nodes):
+        node[14 + 106 + 128 + n // 8] |= 0x80 >> (n % 8)
+    for i, off in enumerate((14, 14 + 106, 14 + 106 + 128, node_size - 8)):
+        struct.pack_into(">H", node, node_size - 2 * (i + 1), off)
+    return bytes(node)
+
+
+def _hfs_catalog_leaf(node_size: int, name: str) -> bytes:
+    uni = name.encode("utf-16-be")
+    nchars = len(uni) // 2
+
+    def key(parent_id: int, key_name: bytes) -> bytes:
+        k = struct.pack(">IH", parent_id, len(key_name) // 2) + key_name
+        return struct.pack(">H", len(k)) + k
+
+    date = HFS_CREATE_DATE
+    folder = struct.pack(">HHIIIIIII", 1, 0x0002, 0, HFS_ROOT_FOLDER_ID,
+                         date, date, date, date, 0)       # type flags valence id 5 dates (last = backup)
+    folder += bytes(16)                                   # permissions (BSD info)
+    folder += bytes(16) + bytes(16)                       # userInfo + finderInfo
+    folder += struct.pack(">II", 0, 0)                    # text encoding + reserved
+    assert len(folder) == 88
+
+    thread = struct.pack(">HHI", 3, 0, HFS_ROOT_PARENT_ID) + struct.pack(">H", nchars) + uni
+
+    # records are sorted by (parentID, name): (1,"iPod") then (2,"")
+    recs = [key(HFS_ROOT_PARENT_ID, uni) + folder,
+            key(HFS_ROOT_FOLDER_ID, b"") + thread]
+
+    node = bytearray(node_size)
+    struct.pack_into(">IIBBHH", node, 0, 0, 0, 0xFF, 1, len(recs), 0)   # leaf, height 1
+    pos = 14
+    offsets = []
+    for r in recs:
+        assert len(r) % 2 == 0
+        offsets.append(pos)
+        node[pos:pos + len(r)] = r
+        pos += len(r)
+    offsets.append(pos)
+    for i, off in enumerate(offsets):
+        struct.pack_into(">H", node, node_size - 2 * (i + 1), off)
+    return bytes(node)
+
+
+def _hfs_params(total_sectors: int) -> int:
+    """Returns the number of allocation blocks; the last >=1 KiB of the
+    partition is left for the alternate volume header."""
+    total_blocks = (total_sectors * SECTOR_SIZE - 1024) // HFS_BLOCK_SIZE
+    if total_blocks < HFS_MIN_BLOCKS:
+        raise ValueError(
+            f"a {total_sectors * SECTOR_SIZE / 2**20:.1f} MiB partition is too small "
+            f"for an HFS+ volume - use a larger --hdd-size")
+    if total_blocks >= 2**32:
+        raise ValueError("partition too large for HFS+ with 4 KiB blocks")
+    return total_blocks
+
+
+def _format_hfsplus(f, start_sector: int, total_sectors: int) -> None:
+    """Writes an empty, non-journaled HFS+ volume into the open file at
+    `start_sector`. Only metadata is written; the rest stays zero."""
+    bs = HFS_BLOCK_SIZE
+    total_blocks = _hfs_params(total_sectors)
+    base = start_sector * SECTOR_SIZE
+    part_bytes = total_sectors * SECTOR_SIZE
+
+    alloc_blocks = -(-(-(-total_blocks // 8)) // bs)          # ceil(bitmap bytes / bs)
+    ext_blocks = 1                                             # one node, header only
+    cat_blocks = HFS_CATALOG_NODES * HFS_NODE_SIZE // bs
+    alloc_start = 1                                            # block 0 holds boot blocks + header
+    ext_start = alloc_start + alloc_blocks
+    cat_start = ext_start + ext_blocks
+    used_blocks = cat_start + cat_blocks
+    free_blocks = total_blocks - used_blocks
+    if free_blocks <= 0:
+        raise ValueError("partition too small for HFS+ metadata")
+
+    # --- volume header -------------------------------------------------
+    vh = bytearray(SECTOR_SIZE)
+    struct.pack_into(">HHII", vh, 0, 0x482B, 4, 0x0100, 0x31302E30)  # 'H+', v4, unmounted, '10.0'
+    struct.pack_into(">IIIII", vh, 12, 0, HFS_CREATE_DATE, HFS_CREATE_DATE, 0, HFS_CREATE_DATE)
+    struct.pack_into(">IIIIIIII", vh, 32, 0, 0,                      # file/folder count
+                     bs, total_blocks, free_blocks, used_blocks,      # nextAllocation = first free
+                     HFS_BLOCK_SIZE * 16, HFS_BLOCK_SIZE * 16)        # rsrc/data clump
+    struct.pack_into(">IIQ", vh, 64, HFS_FIRST_USER_ID, 1, 1)         # nextCatalogID writeCount encodings(MacRoman)
+    struct.pack_into(">Q", vh, 80 + 6 * 4, HFS_VOLUME_UNIQUE_ID)
+    vh[112:192] = _hfs_fork(alloc_blocks * bs, alloc_blocks * bs, alloc_start, alloc_blocks)
+    vh[192:272] = _hfs_fork(ext_blocks * bs, ext_blocks * bs, ext_start, ext_blocks)
+    vh[272:352] = _hfs_fork(cat_blocks * bs, cat_blocks * bs, cat_start, cat_blocks)
+    # attributes + startup files: empty forks (already zero)
+
+    # --- allocation bitmap ----------------------------------------------
+    bitmap = bytearray(alloc_blocks * bs)
+    for b in range(used_blocks):
+        bitmap[b // 8] |= 0x80 >> (b % 8)
+
+    # --- B-trees -------------------------------------------------------
+    ext_tree = _hfs_btree_header_node(
+        HFS_NODE_SIZE, tree_depth=0, root=0, leaf_records=0, first_leaf=0, last_leaf=0,
+        max_key_len=10, total_nodes=ext_blocks * bs // HFS_NODE_SIZE, used_nodes=1,
+        clump=ext_blocks * bs, attributes=0x2)                        # kBTBigKeysMask
+    cat_tree = (_hfs_btree_header_node(
+        HFS_NODE_SIZE, tree_depth=1, root=1, leaf_records=2, first_leaf=1, last_leaf=1,
+        max_key_len=516, total_nodes=HFS_CATALOG_NODES, used_nodes=2,
+        clump=cat_blocks * bs, attributes=0x6)                        # BigKeys | VariableIndexKeys
+        + _hfs_catalog_leaf(HFS_NODE_SIZE, HFS_VOLUME_NAME))
+
+    def put(offset, data):
+        f.seek(base + offset)
+        f.write(data)
+
+    put(1024, vh)                                   # primary header (boot blocks stay zero)
+    put(alloc_start * bs, bitmap)
+    put(ext_start * bs, ext_tree)
+    put(cat_start * bs, cat_tree)
+    put(part_bytes - 1024, vh)                      # alternate header
+
+
 @dataclass
 class HddLayout:
     scheme: str
+    fs_name: str            # filesystem placed in the data partition
     total_sectors: int
     fw_start: int
     fw_sectors: int
-    fat_start: int
-    fat_sectors: int
+    data_start: int
+    data_sectors: int
 
 
 def hdd_layout(fw: "FirmwareImage", scheme: str, size_mib: int) -> HddLayout:
@@ -1068,12 +1226,17 @@ def hdd_layout(fw: "FirmwareImage", scheme: str, size_mib: int) -> HddLayout:
     if need > fw_sectors:
         fw_sectors = -(-need // HDD_FW_ROUND_SECTORS) * HDD_FW_ROUND_SECTORS
     total = size_mib * 2048
-    fat_start = fw_start + fw_sectors
-    fat_sectors = total - fat_start
-    if fat_sectors <= 0:
+    data_start = fw_start + fw_sectors
+    data_sectors = total - data_start
+    if data_sectors <= 0:
         raise ValueError(f"--hdd-size {size_mib} MiB is too small for the firmware partition")
-    _fat32_params(fat_sectors)    # validates the size early
-    return HddLayout(scheme, total, fw_start, fw_sectors, fat_start, fat_sectors)
+    if scheme == "apm":
+        fs_name = "HFS+"
+        _hfs_params(data_sectors)          # validates the size early
+    else:
+        fs_name = "FAT32"
+        _fat32_params(data_sectors)
+    return HddLayout(scheme, fs_name, total, fw_start, fw_sectors, data_start, data_sectors)
 
 
 def locate_hdd_firmware(path: str, scheme: str) -> tuple[int, int]:
@@ -1148,7 +1311,7 @@ def patch_hdd_aupd_ids(path: str, fw_offset: int) -> list[str]:
 def build_hdd_image(fw: "FirmwareImage", scheme: str, out_path: str,
                     size_mib: int = HDD_DEFAULT_SIZE_MIB) -> tuple[HddLayout, list[str]]:
     """Builds a complete HDD image (partition table + firmware partition +
-    empty FAT32), then patches the AUPD id inside the image. Returns
+    an empty data filesystem: FAT32 for MBR, HFS+ for APM), then patches the AUPD id inside the image. Returns
     (layout, notes)."""
     scheme = scheme.lower()
     lay = hdd_layout(fw, scheme, size_mib)
@@ -1156,20 +1319,32 @@ def build_hdd_image(fw: "FirmwareImage", scheme: str, out_path: str,
     out_dir = os.path.dirname(os.path.abspath(out_path))
     if out_dir:
         os.makedirs(out_dir, exist_ok=True)
-    with open(out_path, "wb") as f:
-        f.truncate(lay.total_sectors * SECTOR_SIZE)
-        if scheme == "mbr":
-            _write_mbr(f, lay.fw_start, lay.fw_sectors, lay.fat_start, lay.fat_sectors)
-        else:
-            _write_apm(f, lay.total_sectors, lay.fw_start, lay.fw_sectors,
-                       lay.fat_start, lay.fat_sectors)
-        f.seek(lay.fw_start * SECTOR_SIZE)
-        f.write(fw.buf)
-        _format_fat32(f, lay.fat_start, lay.fat_sectors)
+    try:
+        with open(out_path, "wb") as f:
+            f.truncate(lay.total_sectors * SECTOR_SIZE)
+            if scheme == "mbr":
+                _write_mbr(f, lay.fw_start, lay.fw_sectors, lay.data_start, lay.data_sectors)
+            else:
+                _write_apm(f, lay.total_sectors, lay.fw_start, lay.fw_sectors,
+                           lay.data_start, lay.data_sectors)
+            f.seek(lay.fw_start * SECTOR_SIZE)
+            f.write(fw.buf)
+            if scheme == "apm":
+                _format_hfsplus(f, lay.data_start, lay.data_sectors)
+            else:
+                _format_fat32(f, lay.data_start, lay.data_sectors)
 
-    # find the firmware again through the partition table we just wrote
-    fw_off, _ = locate_hdd_firmware(out_path, scheme)
-    notes = patch_hdd_aupd_ids(out_path, fw_off)
+        # find the firmware again through the partition table we just wrote
+        fw_off, _ = locate_hdd_firmware(out_path, scheme)
+        notes = patch_hdd_aupd_ids(out_path, fw_off)
+    except BaseException:
+        # never leave a half-written image behind
+        try:
+            os.remove(out_path)
+        except OSError:
+            pass
+        raise
+
     return lay, notes
 
 
@@ -1280,8 +1455,9 @@ def build_arg_parser() -> argparse.ArgumentParser:
                           "default name: <input>_flash.bin)")
     ap.add_argument("-d", "--build-hdd", nargs="+", default=None,
                      metavar=("{mbr,apm}", "OUTPUT_FILE"),
-                     help="build an HDD image with the firmware and an empty FAT32 "
-                          "partition (default name: <input>_<type>.img). "
+                     help="build an HDD image with the firmware and an empty data "
+                          "partition: FAT32 for mbr, HFS+ for apm "
+                          "(default name: <input>_<type>.img). "
                           "v0 firmware: apm only; v2/v3: mbr or apm")
     ap.add_argument("-l", "--list", action="store_true",
                      help="list the images found in the firmware directory")
@@ -1423,7 +1599,7 @@ def main():
         print(f"[+] {hdd_type.upper()} HDD image -> {hdd_out} "
               f"({lay.total_sectors * SECTOR_SIZE:,} bytes)")
         print(f"    firmware partition: block {lay.fw_start}, {lay.fw_sectors} sectors")
-        print(f"    FAT32 partition:    block {lay.fat_start}, {lay.fat_sectors} sectors")
+        print(f"    {lay.fs_name} partition:".ljust(24) + f"block {lay.data_start}, {lay.data_sectors} sectors")
         for note in notes:
             print(f"    {note}")
 
