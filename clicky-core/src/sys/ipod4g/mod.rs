@@ -676,6 +676,32 @@ impl System {
                     }
                 }
             }
+
+            while let Some((engine, xfer)) = devices.poll_generic_dma() {
+                let mut src = xfer.src;
+                let mut dst = xfer.dst;
+                debug!(target: "DMA", "do DMA : src:{:x} dst:{:x} count:{:x} width:{:?}", src, dst, xfer.count, xfer.width);
+                // let _ = devices.w32(0x7000_8a0c, 0x8000_0012); // clcd => cmd = 0x12
+                // let _ = devices.w32(0x7000_8a0c, 0x8000_0000); // clcd => val = 0x00
+                for _ in 0..xfer.count {
+                    use devices::DmaWidth;
+                    let xfer_result = match xfer.width {
+                        DmaWidth::Byte => devices.r8(src).and_then(|v| devices.w8(dst, v)),
+                        DmaWidth::Half => devices.r16(src).and_then(|v| devices.w16(dst, v)),
+                        DmaWidth::Word => devices.r32(src).and_then(|v| {
+                            // if i < 0x50
+                            // {debug!(target: "DMA", "    v:{:x}", v);}
+                            devices.w32(dst, v)
+                        }),
+                    };
+                    if xfer_result.is_err() {
+                        break;
+                    }
+                    src += xfer.src_step;
+                    dst += xfer.dst_step;
+                }
+                devices.complete_generic_dma(engine, xfer.channel, xfer.want_intr);
+            }
         }
 
         // TODO?: explore adding callbacks to the signaling system
@@ -929,6 +955,28 @@ impl Bus {
                 } else {
                     None
                 }
+            }
+        }
+    }
+
+    fn poll_generic_dma(&mut self) -> Option<(devices::DmaEngine, devices::DmaXfer)> {
+        match self {
+            Bus::Pp5002(_) => None,
+            Bus::Pp502x(bus) => {
+                if let Some(xfer) = bus.dmacon0.take_ready() {
+                    Some((devices::DmaEngine::Con0, xfer))
+                } else {
+                    bus.dmacon1.take_ready().map(|xfer| (devices::DmaEngine::Con1, xfer))
+                }
+            }
+        }
+    }
+
+    fn complete_generic_dma(&mut self, engine: devices::DmaEngine, channel: usize, want_intr: bool) {
+        if let Bus::Pp502x(bus) = self {
+            match engine {
+                devices::DmaEngine::Con0 => bus.dmacon0.complete(channel, want_intr),
+                devices::DmaEngine::Con1 => bus.dmacon1.complete(channel, want_intr),
             }
         }
     }
