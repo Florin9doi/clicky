@@ -12,13 +12,15 @@ const GRAM_LEN: usize = MAX_WIDTH * MAX_HEIGHT;
 #[derive(Debug, Default, Copy, Clone)]
 struct InternalRegs {
     cmd: u16,
-    hsa: usize,
-    hea: usize,
-    vsa: usize,
-    vea: usize,
+    x_start: usize,
+    x_end: usize,
+    y_start: usize,
+    y_end: usize,
+    mirror: bool,
+    horiz_vert: usize,
+
     cur_x: usize,
     cur_y: usize,
-    mirror: bool,
 }
 
 // The unknown LCD controller used on iPod Photo
@@ -41,37 +43,83 @@ impl Hd66xxx {
         Hd66xxx {
             gram: Arc::new(RwLock::new([0; GRAM_LEN])),
             ireg: Arc::new(RwLock::new(InternalRegs {
-                hea: (MAX_WIDTH - 1),
-                vea: (MAX_HEIGHT - 1),
+                x_end: MAX_WIDTH - 1,
+                y_end: MAX_HEIGHT - 1,
                 ..InternalRegs::default()
             })),
         }
     }
 
+    fn width(ireg: &InternalRegs) -> usize {
+        ireg.x_start.abs_diff(ireg.x_end) + 1
+    }
+
+    fn height(ireg: &InternalRegs) -> usize {
+        ireg.y_start.abs_diff(ireg.y_end) + 1
+    }
+
+    fn reset_cursor(ireg: &mut InternalRegs) {
+        ireg.cur_x = 0;
+        ireg.cur_y = 0;
+    }
+
+    fn cursor_position(ireg: &InternalRegs) -> Option<(usize, usize)> {
+        let width = Self::width(ireg);
+        let height = Self::height(ireg);
+
+        if ireg.cur_x >= width || ireg.cur_y >= height {
+            return None;
+        }
+
+        let x = if ireg.x_start <= ireg.x_end {
+            ireg.x_start + ireg.cur_x
+        } else {
+            ireg.x_start - ireg.cur_x
+        };
+
+        let y = if ireg.y_start <= ireg.y_end {
+            ireg.y_start + ireg.cur_y
+        } else {
+            ireg.y_start - ireg.cur_y
+        };
+
+        Some((x, y))
+    }
+
     fn advance(ireg: &mut InternalRegs) {
-        let width = ireg.hea - ireg.hsa + 1;
-        let height = ireg.vea - ireg.vsa + 1;
-        let pos = ireg.cur_y * width + ireg.cur_x + 1;
-
-        ireg.cur_x = pos % width;
-        ireg.cur_y = pos / width;
-
-        if ireg.cur_y >= height {
-            ireg.cur_y = height;
+        let width = Self::width(ireg);
+        let height = Self::height(ireg);
+        match ireg.horiz_vert {
+            6 => { // left to right / right to left
+                ireg.cur_x += 1;
+                if ireg.cur_x >= width {
+                    ireg.cur_x = 0;
+                    ireg.cur_y += 1;
+                }
+            }
+            0 => { // top to bottom
+                ireg.cur_y += 1;
+                if ireg.cur_y >= height {
+                    ireg.cur_y = 0;
+                    ireg.cur_x += 1;
+                }
+            }
+            mode => {
+                error!(target: "LCD", "Hd66xxx: unsupported memory access mode {:x}", mode);
+            }
         }
     }
 
     fn write_ram(&mut self, val: u16) {
         let mut ireg = self.ireg.write().unwrap();
-        let idx = {
-            let x = ireg.hsa + ireg.cur_x;
-            let y = ireg.vsa + ireg.cur_y;
-            y * MAX_WIDTH + x
+        let Some((x, y)) = Self::cursor_position(&ireg) else {
+            return;
         };
-        if idx < GRAM_LEN {
+        if x < MAX_WIDTH && y < MAX_HEIGHT {
+            let idx = y * MAX_WIDTH + x;
             self.gram.write().unwrap()[idx] = val;
         }
-        Hd66xxx::advance(&mut ireg);
+        Self::advance(&mut ireg);
     }
 
     fn make_render_callback(&self) -> RenderCallback {
@@ -107,34 +155,33 @@ impl LcdPanel for Hd66xxx {
                 ireg.mirror = !val.get_bit(2);
             }
             0x12 => {
-                ireg.vsa = val as usize;
-                ireg.cur_x = 0;
-                ireg.cur_y = 0;
+                ireg.y_start = val as usize;
+                Self::reset_cursor(&mut ireg);
             }
             0x13 => {
                 if ireg.mirror {
-                    ireg.hsa = MAX_WIDTH - val as usize - 1;
+                    ireg.x_start = MAX_WIDTH - val as usize - 1;
                 } else {
-                    ireg.hea = val as usize;
+                    ireg.x_end = val as usize;
                 }
-                ireg.cur_x = 0;
-                ireg.cur_y = 0;
+                Self::reset_cursor(&mut ireg);
             }
             0x15 => {
-                ireg.vea = val as usize;
-                ireg.cur_x = 0;
-                ireg.cur_y = 0;
+                ireg.y_end = val as usize;
+                Self::reset_cursor(&mut ireg);
             }
             0x16 => {
                 if ireg.mirror {
-                    ireg.hea = MAX_WIDTH - val as usize - 1;
+                    ireg.x_end = MAX_WIDTH - val as usize - 1;
                 } else {
-                    ireg.hsa = val as usize;
+                    ireg.x_start = val as usize;
                 }
-                ireg.cur_x = 0;
-                ireg.cur_y = 0;
+                Self::reset_cursor(&mut ireg);
             }
-            0x01 | 0x02 | 0x18 | 0x7e | 0x7f | 0x80 | 0xce | 0xef => {
+            0x18 => {
+                ireg.horiz_vert = val as usize;
+            }
+            0x01 | 0x02 | 0x7e | 0x7f | 0x80 | 0xce | 0xef => {
             }
             invalid_cmd => {
                 return Err(Fatal(format!(
