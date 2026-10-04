@@ -65,6 +65,15 @@ pub struct DisplaySize {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct DisplayPanel {
+    pub controller: DisplayType,
+    pub width: usize,
+    pub height: usize,
+    pub mirrored: bool,
+    pub rotated: bool,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum SoC {
     Pp5002,
     Pp5020,
@@ -133,15 +142,55 @@ const CLICKWHEEL_KEYMAP: &[(Ipod4gKey, KeyRoute)] = &[
     (Ipod4gKey::Hold,   KeyRoute::Gpio(GpioBlockId::Abcd, 5, KeySticky::True,  KeyActive::Low)),
 ];
 
+const DISPLAY_1G_4G: &DisplayPanel = &DisplayPanel {
+    controller: DisplayType::Mono,
+    width: 160,
+    height: 128,
+    mirrored: false,
+    rotated: false,
+};
+const DISPLAY_4G_PHOTO: &DisplayPanel = &DisplayPanel {
+    controller: DisplayType::Color,
+    width: 220,
+    height: 176,
+    mirrored: false,
+    rotated: false,
+};
+const DISPLAY_4G_COLOR: &DisplayPanel = &DisplayPanel {
+    controller: DisplayType::Hd66789,
+    width: 220,
+    height: 176,
+    mirrored: false,
+    rotated: true,
+};
+const DISPLAY_5G: &DisplayPanel = &DisplayPanel {
+    controller: DisplayType::Bcm2722,
+    width: 320,
+    height: 240,
+    mirrored: false,
+    rotated: false,
+};
+const DISPLAY_MINI: &DisplayPanel = &DisplayPanel {
+    controller: DisplayType::Mono,
+    width: 138,
+    height: 110,
+    mirrored: true,
+    rotated: false,
+};
+const DISPLAY_NANO: &DisplayPanel = &DisplayPanel {
+    controller: DisplayType::Hd66789,
+    width: 176,
+    height: 132,
+    mirrored: false,
+    rotated: false,
+};
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Model {
     pub name: &'static str,
     pub alias: &'static str,
     pub soc: SoC,
-    pub display_type: DisplayType,
-    pub mirrored: bool,
-    pub width: usize,
-    pub height: usize,
+    pub display: &'static DisplayPanel,
     pub keymap: &'static [(Ipod4gKey, KeyRoute)],
     pub flash_chip: FlashChip,
 }
@@ -152,10 +201,7 @@ impl Model {
             name: "iPod (1st gen)",
             alias: "1g",
             soc: SoC::Pp5002,
-            display_type: DisplayType::Mono,
-            mirrored: false,
-            width: 160,
-            height: 128,
+            display: DISPLAY_1G_4G,
             keymap: IPOD_1G_KEYMAP,
             flash_chip: FlashChip::LH28F800BGHB,
         },
@@ -163,10 +209,7 @@ impl Model {
             name: "iPod (3rd gen)",
             alias: "3g",
             soc: SoC::Pp5002,
-            display_type: DisplayType::Mono,
-            mirrored: false,
-            width: 160,
-            height: 128,
+            display: DISPLAY_1G_4G,
             keymap: IPOD_3G_KEYMAP,
             flash_chip: FlashChip::LH28F800BGHB,
         },
@@ -174,10 +217,7 @@ impl Model {
             name: "iPod (4th gen)",
             alias: "4gmono",
             soc: SoC::Pp5020,
-            display_type: DisplayType::Mono,
-            mirrored: false,
-            width: 160,
-            height: 128,
+            display: DISPLAY_1G_4G,
             keymap: CLICKWHEEL_KEYMAP,
             flash_chip: FlashChip::SST39WF800A,
         },
@@ -185,10 +225,7 @@ impl Model {
             name: "iPod Photo (early)",
             alias: "4gphoto",
             soc: SoC::Pp5020,
-            display_type: DisplayType::Color,
-            mirrored: false,
-            width: 220,
-            height: 176,
+            display: DISPLAY_4G_PHOTO,
             keymap: CLICKWHEEL_KEYMAP,
             flash_chip: FlashChip::SST39WF800A,
         },
@@ -196,10 +233,7 @@ impl Model {
             name: "iPod Color (late)",
             alias: "4gcolor",
             soc: SoC::Pp5020,
-            display_type: DisplayType::Hd66789,
-            mirrored: false,
-            width: 220,
-            height: 176,
+            display: DISPLAY_4G_COLOR,
             keymap: CLICKWHEEL_KEYMAP,
             flash_chip: FlashChip::SST39WF800A,
         },
@@ -207,10 +241,7 @@ impl Model {
             name: "iPod Video",
             alias: "5gvideo",
             soc: SoC::Pp5020,
-            display_type: DisplayType::Bcm2722,
-            mirrored: false,
-            width: 320,
-            height: 240,
+            display: DISPLAY_5G,
             keymap: CLICKWHEEL_KEYMAP,
             flash_chip: FlashChip::SST39WF800A,
         },
@@ -218,10 +249,7 @@ impl Model {
             name: "iPod Mini (1st gen)",
             alias: "mini1g",
             soc: SoC::Pp5020,
-            display_type: DisplayType::Mono,
-            mirrored: true,
-            width: 138,
-            height: 110,
+            display: DISPLAY_MINI,
             keymap: IPOD_MINI1G_KEYMAP,
             flash_chip: FlashChip::SST39WF800A,
         },
@@ -229,10 +257,7 @@ impl Model {
             name: "iPod Mini (2nd gen)",
             alias: "mini2g",
             soc: SoC::Pp5022,
-            display_type: DisplayType::Mono,
-            mirrored: true,
-            width: 138,
-            height: 110,
+            display: DISPLAY_MINI,
             keymap: CLICKWHEEL_KEYMAP,
             flash_chip: FlashChip::SST39WF800A,
         },
@@ -240,10 +265,7 @@ impl Model {
             name: "iPod Nano",
             alias: "nano1g",
             soc: SoC::Pp5022,
-            display_type: DisplayType::Hd66789,
-            mirrored: false,
-            width: 176,
-            height: 132,
+            display: DISPLAY_NANO,
             keymap: CLICKWHEEL_KEYMAP,
             flash_chip: FlashChip::SST39WF400A,
         },
@@ -258,22 +280,22 @@ impl Model {
     }
 
     pub fn display_type(self) -> DisplayType {
-        self.display_type
+        self.display.controller
     }
 
     pub fn display_size(self) -> DisplaySize {
         DisplaySize {
-            width: self.width,
-            height: self.height,
+            width: self.display.width,
+            height: self.display.height,
         }
     }
 
     pub fn make_panel(&self) -> Box<dyn LcdPanel> {
         use devices::{Bcm2722Panel, Hd66753, Hd66789, Hd66xxx};
         match self.display_type() {
-            DisplayType::Mono => Box::new(Hd66753::new(self.mirrored)),
+            DisplayType::Mono => Box::new(Hd66753::new(self.display.mirrored)),
             DisplayType::Color => Box::new(Hd66xxx::new()),
-            DisplayType::Hd66789 => Box::new(Hd66789::new()),
+            DisplayType::Hd66789 => Box::new(Hd66789::new(self.display.rotated)),
             DisplayType::Bcm2722 => Box::new(Bcm2722Panel::new()),
         }
     }

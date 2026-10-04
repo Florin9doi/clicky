@@ -17,7 +17,7 @@ struct InternalRegs {
     y_start: usize,
     y_end: usize,
     mirror: bool,
-    horiz_vert: usize,
+    vertical_input: usize,
 
     cur_x: usize,
     cur_y: usize,
@@ -89,7 +89,7 @@ impl Hd66xxx {
     fn advance(ireg: &mut InternalRegs) {
         let width = Self::width(ireg);
         let height = Self::height(ireg);
-        match ireg.horiz_vert {
+        match ireg.vertical_input {
             6 => { // left to right / right to left
                 ireg.cur_x += 1;
                 if ireg.cur_x >= width {
@@ -179,7 +179,7 @@ impl LcdPanel for Hd66xxx {
                 Self::reset_cursor(&mut ireg);
             }
             0x18 => {
-                ireg.horiz_vert = val as usize;
+                ireg.vertical_input = val as usize;
             }
             0x01 | 0x02 | 0x7e | 0x7f | 0x80 | 0xce | 0xef => {
             }
