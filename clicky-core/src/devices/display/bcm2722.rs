@@ -127,7 +127,7 @@ impl Memory for Bcm2722 {
                 }
             }
             DATA | 4 | 0x40000 => {
-                if (self.addr & 0xffff_0000) == 0xe0000 {
+                if self.addr & 0x1f_0000 != 0 {
                     self.panel.write_data32(val)
                 } else {
                     return Ok(());
