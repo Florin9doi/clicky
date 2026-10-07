@@ -1,6 +1,7 @@
 use std::io::{Read, Seek};
 use std::time::Duration;
 use std::collections::HashMap;
+use std::collections::VecDeque;
 
 use armv4t_emu::{reg, Cpu};
 use relativity::Timeout;
@@ -321,7 +322,7 @@ pub struct System {
 
     cpu: Cpu,
     cop: Cpu,
-    devices: Bus,
+    pub devices: Bus,
     controls: Option<Ipod4gControls>,
     /// A second set of key sinks, used to synthesize key presses
     /// independently of whoever took ownership of the system's controls.
@@ -336,6 +337,7 @@ pub struct System {
     reset_requested: std::sync::Arc<std::sync::atomic::AtomicBool>,
 
     executor: Executor,
+    // pub history: VecDeque<u32>,
 }
 
 #[derive(Debug)]
@@ -410,6 +412,7 @@ impl System {
             reset_requested: Default::default(),
 
             executor,
+            // history: VecDeque::with_capacity(100),
         };
 
         sys.reset_requested = sys.devices.devcon().reset_requested();
@@ -523,10 +526,44 @@ impl System {
 
         // sandbox
         {
-            // let (mut charger_tx, charger_rx) = gpio::new(gpio_changed.clone(), "Sandbox");
+            // let (mut gpio_tx, gpio_rx) = gpio::new(gpio_changed.clone(), "Sandbox");
             // let mut gpio_abcd = sys.devices.gpio_abcd().lock().unwrap();
-            // gpio_abcd.register_in(0*8 + 6, charger_rx.clone());
-            // charger_tx.set_high();
+            // gpio_abcd.register_in(0*8 + 0, gpio_rx.clone()); // A
+            // gpio_abcd.register_in(0*8 + 1, gpio_rx.clone());
+            // gpio_abcd.register_in(0*8 + 2, gpio_rx.clone());
+            // gpio_abcd.register_in(0*8 + 3, gpio_rx.clone());
+            // gpio_abcd.register_in(0*8 + 4, gpio_rx.clone());
+            // gpio_abcd.register_in(0*8 + 5, gpio_rx.clone());
+            // gpio_abcd.register_in(0*8 + 6, gpio_rx.clone());
+            // gpio_abcd.register_in(0*8 + 7, gpio_rx.clone());
+
+            // gpio_abcd.register_in(1*8 + 0, gpio_rx.clone()); // B
+            // gpio_abcd.register_in(1*8 + 1, gpio_rx.clone());
+            // gpio_abcd.register_in(1*8 + 2, gpio_rx.clone());
+            // gpio_abcd.register_in(1*8 + 3, gpio_rx.clone());
+            // gpio_abcd.register_in(1*8 + 4, gpio_rx.clone());
+            // gpio_abcd.register_in(1*8 + 5, gpio_rx.clone());
+            // gpio_abcd.register_in(1*8 + 6, gpio_rx.clone()); // fully charged
+            // gpio_abcd.register_in(1*8 + 7, gpio_rx.clone());
+
+            // gpio_abcd.register_in(2*8 + 0, gpio_rx.clone()); // C
+            // gpio_abcd.register_in(2*8 + 1, gpio_rx.clone());
+            // gpio_abcd.register_in(2*8 + 2, gpio_rx.clone());
+            // gpio_abcd.register_in(2*8 + 3, gpio_rx.clone()); // battery on ?
+            // gpio_abcd.register_in(2*8 + 4, gpio_rx.clone()); // charger off ?
+            // gpio_abcd.register_in(2*8 + 5, gpio_rx.clone());
+            // gpio_abcd.register_in(2*8 + 6, gpio_rx.clone());
+            // gpio_abcd.register_in(2*8 + 7, gpio_rx.clone()); // firewire detect - needed for rockbox
+
+            // gpio_abcd.register_in(3*8 + 0, gpio_rx.clone()); // D
+            // gpio_abcd.register_in(3*8 + 1, gpio_rx.clone());
+            // gpio_abcd.register_in(3*8 + 2, gpio_rx.clone());
+            // gpio_abcd.register_in(3*8 + 3, gpio_rx.clone());
+            // gpio_abcd.register_in(3*8 + 4, gpio_rx.clone());
+            // gpio_abcd.register_in(3*8 + 5, gpio_rx.clone());
+            // gpio_abcd.register_in(3*8 + 6, gpio_rx.clone());
+            // gpio_abcd.register_in(3*8 + 7, gpio_rx.clone());
+            // gpio_tx.set_high();
         }
 
         // Run the HLE bootloader if an HLE boot was requested
@@ -570,6 +607,13 @@ impl System {
         _halt_block_mode: BlockMode,
         mut sniff_memory: (&[u32], impl FnMut(CpuId, MemAccess)),
     ) -> FatalMemResult<bool> {
+
+        let pc = self.cpu.reg_get(self.cpu.mode(), reg::PC);
+        // if self.history.len() == 100 {
+        //     self.history.pop_front();
+        // }
+        // self.history.push_back(pc);
+
         if self.frozen {
             return Ok(true);
         }
@@ -632,6 +676,7 @@ impl System {
                     "MMIO",
                     MemExceptionCtx {
                         pc: cpu.reg_get(cpu.mode(), reg::PC),
+                        inst: devices.r32(pc).expect("inst"),
                         access,
                         in_device: format!("{}, {}", cpuid, devices.probe(access.offset)),
                     },
@@ -930,6 +975,13 @@ impl Bus {
         match self {
             Bus::Pp5002(_) => None,
             Bus::Pp502x(bus) => Some(&mut bus.opto),
+        }
+    }
+
+    fn debug_button_irq(&mut self) -> Option<&mut irq::Sender> {
+        match self {
+            Bus::Pp5002(_) => None,
+            Bus::Pp502x(bus) => Some(&mut bus.debug_button_irq),
         }
     }
 

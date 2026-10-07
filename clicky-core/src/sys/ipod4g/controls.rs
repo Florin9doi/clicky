@@ -88,6 +88,7 @@ impl TakeControls for System {
         } = self.controls.take()?;
 
         let mut controls = Ipod4gBinds::default();
+        let mut debug_button_irq = self.devices.debug_button_irq().cloned();
 
         for key in [
             Ipod4gKey::Up,
@@ -98,10 +99,26 @@ impl TakeControls for System {
             Ipod4gKey::Hold,
         ] {
             if let Some(mut sink) = key_sinks.remove(&key) {
+                let mut hijack_irq = if key == Ipod4gKey::Hold {
+                    debug_button_irq.take()
+                } else {
+                    None
+                };
+
                 controls.keys.insert(
                     key,
                     Box::new(move |pressed| {
-                        sink.set(pressed)
+                        sink.set(pressed);
+
+                        if let Some(irq) = &mut hijack_irq {
+                            if pressed {
+                                {debug!(target: "LCD2", "HOLD assert");}
+                                irq.assert();
+                            } else {
+                                {debug!(target: "LCD2", "HOLD clear");}
+                                irq.clear();
+                            }
+                        }
                     })
                 );
             }

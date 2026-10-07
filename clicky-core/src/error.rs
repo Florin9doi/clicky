@@ -61,6 +61,7 @@ impl From<std::io::Error> for MemException {
 #[derive(Debug, Clone)]
 pub struct MemExceptionCtx {
     pub pc: u32,
+    pub inst: u32,
     pub access: MemAccess,
     pub in_device: String,
 }
@@ -69,8 +70,8 @@ impl std::fmt::Display for MemExceptionCtx {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(
             f,
-            "[pc {:#010x?}][addr {:#010x?}][{}]",
-            self.pc, self.access.offset, self.in_device
+            "[pc {:#010x?}][inst {:#010x?}][addr {:#010x?}][{}]",
+            self.pc, self.inst, self.access.offset, self.in_device
         )
     }
 }
@@ -116,6 +117,7 @@ impl MemException {
                 "I2C",
                 MemExceptionCtx {
                     pc: ctx.pc,
+                    inst: 0,
                     access,
                     in_device,
                 },
