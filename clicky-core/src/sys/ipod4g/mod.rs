@@ -241,7 +241,7 @@ impl Model {
         Self {
             name: "iPod Video",
             alias: "5gvideo",
-            soc: SoC::Pp5020,
+            soc: SoC::Pp5022,
             display: DISPLAY_5G,
             keymap: CLICKWHEEL_KEYMAP,
             flash_chip: FlashChip::SST39WF800A,
@@ -497,6 +497,12 @@ impl System {
             gpio_abcd.register_in(2*8 + 3, charger_rx.clone()); // battery on ?
             gpio_abcd.register_in(2*8 + 4, charger_rx.clone()); // charger off ? - needed for 1.0.4 to avoid disk mode
             gpio_abcd.register_in(2*8 + 7, charger_rx.clone()); // firewire detect - needed for rockbox
+            charger_tx.set_high();
+        }
+        if model.alias == "5gvideo" {
+            let (mut charger_tx, charger_rx) = gpio::new(gpio_changed.clone(), "Charger");
+            let mut gpio_abcd = sys.devices.gpio_abcd().lock().unwrap();
+            gpio_abcd.register_in(3, charger_rx.clone());
             charger_tx.set_high();
         }
 
