@@ -69,7 +69,9 @@ impl PP502xBus {
         // mailbox is the only core-specific IRQ in the system, which is kinda neat
         let (mbx_cpu_irq_tx, mbx_cpu_irq_rx) = irq::new(irq_pending.clone(), "Mailbox (CPU)");
         let (mbx_cop_irq_tx, mbx_cop_irq_rx) = irq::new(irq_pending.clone(), "Mailbox (COP)");
-        let (dma_irq_tx, dma_irq_rx) = irq::new(irq_pending.clone(), "DMA");
+        let (dma0_irq_tx, dma0_irq_rx) = irq::new(irq_pending.clone(), "DMA0");
+        let (dma1_irq_tx, dma1_irq_rx) = irq::new(irq_pending.clone(), "DMA1");
+
         let fastram_size = match model.soc {
             SoC::Pp5020 => { PP5020_FASTRAM },
             SoC::Pp5022 => { PP5022_FASTRAM },
@@ -92,7 +94,8 @@ impl PP502xBus {
             // .register(20, usb_irq_rx)
             .register(23, core.ide_irq_rx.clone())
             // .register(25, firewire_irq_rx)
-            .register(26, dma_irq_rx)
+            .register(26, dma0_irq_rx)
+            .register(27, dma1_irq_rx)
             .register(32, core.gpio0_irq_rx.clone())
             .register(33, gpio1_irq_rx)
             .register(34, gpio2_irq_rx)
@@ -105,9 +108,8 @@ impl PP502xBus {
         let gpio_mirror_abcd = core.gpio_abcd.clone();
         let gpio_mirror_efgh = gpio_efgh.clone();
         let gpio_mirror_ijkl = gpio_ijkl.clone();
-        let dmacon0 = DmaCon::new("0", Some(core.ide_dmarq_rx.clone()), Some(dma_irq_tx));
-        // the undocumented second engine -- nothing routes DMA requests to it yet
-        let dmacon1 = DmaCon::new("1", None, None);
+        let dmacon0 = DmaCon::new("0", Some(core.ide_dmarq_rx.clone()), dma0_irq_tx);
+        let dmacon1 = DmaCon::new("1", None, dma1_irq_tx);
         let opto = OptoWheel::new(core.i2c_irq_tx.clone());
 
         use devices::*;

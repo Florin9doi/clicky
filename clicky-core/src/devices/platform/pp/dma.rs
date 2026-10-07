@@ -146,7 +146,7 @@ pub struct DmaCon {
     master_status: u32,
     req_status: u32,
     ready_mask: u8,
-    irq: Option<irq::Sender>,
+    irq: irq::Sender,
 
     // HACK: IDE DMA doesn't actually go through the DMA controller
     // that said, to keep things simple in the emulator, we route IDE DMA through the main DMA
@@ -165,7 +165,7 @@ impl DmaCon {
     pub fn new(
         label: &'static str,
         ide_dmarq: Option<irq::Receiver>,
-        irq: Option<irq::Sender>,
+        irq: irq::Sender,
     ) -> DmaCon {
         let mut dma = DmaCon {
             label,
@@ -231,9 +231,7 @@ impl DmaCon {
 
         if want_intr {
             dma.status |= STATUS_INTR;
-            if let Some(irq) = &mut self.irq {
-                irq.assert();
-            }
+            self.irq.assert();
         }
     }
 }
