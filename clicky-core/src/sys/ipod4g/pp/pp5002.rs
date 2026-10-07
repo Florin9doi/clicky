@@ -217,6 +217,7 @@ mmap! {
         0xcf00_1100..=0xcf00_1107 => timer1,
         0xcf00_1108..=0xcf00_110f => timer2,
         0xcf00_1110..=0xcf00_1113 => usec_timer,
+        0xcf00_1114..=0xcf00_1117 => rtc,
         0xcf00_4000..=0xcf00_401f => unk4000,
         0xcf00_4020..=0xcf00_402f => cachecon,
         0xcf00_4030..=0xcf00_403f => ppver,
