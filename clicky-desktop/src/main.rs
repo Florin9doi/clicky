@@ -12,6 +12,7 @@ use structopt::StructOpt;
 use clicky_core::block::{self, BlockDev};
 use clicky_core::gui::TakeControls;
 use clicky_core::sys::ipod4g::{BootKind, Ipod4gGdb, Ipod4gKey, Model, System as Ipod4g};
+use clicky_core::memory::Memory;
 
 mod backends;
 mod blockcfg;
@@ -214,6 +215,11 @@ fn main() -> DynResult<()> {
         if let Err(fatal_error) = system_result {
             error!("Fatal Error! Caused by: {:#010x?}", fatal_error);
             error!("Dumping system state to {}", SYSDUMP_FILENAME);
+            // for n in 0..20 {
+            //     let addr = system.history.get(n).expect("XXX").clone();
+            //     {debug!(target: "LCD", "PC:{:8x} val:{:x}", addr, system.devices.r32(addr).expect("XXX"));}
+            // }
+
             std::fs::write(SYSDUMP_FILENAME, format!("{:#x?}", *system))?;
 
             match &mut system {

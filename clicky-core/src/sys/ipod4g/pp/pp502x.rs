@@ -36,6 +36,7 @@ pub struct PP502xBus {
     pub dmacon0: devices::DmaCon,
     pub dmacon1: devices::DmaCon,
 
+    pub debug_button_irq: irq::Sender,
     pub mystery_flash_stub: devices::Stub,
     pub pwmcon: devices::PWMCon,
     pub bcm_video: devices::Bcm2722,
@@ -71,6 +72,7 @@ impl PP502xBus {
         let (mbx_cop_irq_tx, mbx_cop_irq_rx) = irq::new(irq_pending.clone(), "Mailbox (COP)");
         let (dma0_irq_tx, dma0_irq_rx) = irq::new(irq_pending.clone(), "DMA0");
         let (dma1_irq_tx, dma1_irq_rx) = irq::new(irq_pending.clone(), "DMA1");
+        let (debug_button_irq_tx, debug_button_irq_rx) = irq::new(irq_pending.clone(), "DEBUG: button press (Hold-key hijack)");
 
         let fastram_size = match model.soc {
             SoC::Pp5020 => { PP5020_FASTRAM },
@@ -101,7 +103,45 @@ impl PP502xBus {
             .register(34, gpio2_irq_rx)
             // .register(36, ser0_irq_rx)
             // .register(37, ser1_irq_rx)
-            .register(40, core.i2c_irq_rx.clone());
+            .register(40, core.i2c_irq_rx.clone())
+
+            // .register(2, debug_button_irq_rx.clone()) // HACK
+            // .register(3, debug_button_irq_rx.clone()) // HACK
+            // .register(5, debug_button_irq_rx.clone()) // HACK
+            // .register(6, debug_button_irq_rx.clone()) // HACK
+            // .register(7, debug_button_irq_rx.clone()) // HACK
+            // .register(8, debug_button_irq_rx.clone()) // HACK
+            // .register(9, debug_button_irq_rx.clone()) // HACK
+            // .register(11, debug_button_irq_rx.clone()) // HACK !!!
+            // .register(12, debug_button_irq_rx.clone()) // HACK
+            // .register(13, debug_button_irq_rx.clone()) // HACK
+            // .register(14, debug_button_irq_rx.clone()) // HACK
+            // .register(15, debug_button_irq_rx.clone()) // HACK
+            // .register(16, debug_button_irq_rx.clone()) // HACK
+            // .register(17, debug_button_irq_rx.clone()) // HACK
+            // .register(18, debug_button_irq_rx.clone()) // HACK
+            // .register(19, debug_button_irq_rx.clone()) // HACK
+
+            // .register(21, debug_button_irq_rx.clone()) // HACK
+            // .register(22, debug_button_irq_rx.clone()) // HACK
+            // .register(24, debug_button_irq_rx.clone()) // HACK
+            // .register(28, debug_button_irq_rx.clone()) // HACK
+            // .register(29, debug_button_irq_rx.clone()) // HACK
+            // // .register(30, debug_button_irq_rx.clone()) // RESERVED
+            // .register(31, debug_button_irq_rx.clone()) // HACK
+            // .register(35, debug_button_irq_rx.clone()) // HACK
+
+            // .register(38, debug_button_irq_rx.clone()) // HACK
+            // .register(39, debug_button_irq_rx.clone()) // HACK
+            // .register(41, debug_button_irq_rx.clone()) // HACK
+            // .register(42, debug_button_irq_rx.clone()) // HACK
+            // .register(43, debug_button_irq_rx.clone()) // HACK
+            // .register(44, debug_button_irq_rx.clone()) // HACK
+            // .register(45, debug_button_irq_rx.clone()) // HACK
+            // .register(46, debug_button_irq_rx.clone()) // HACK
+            // .register(47, debug_button_irq_rx.clone()) // HACK
+            // .register(48, debug_button_irq_rx.clone()) // HACK
+            ;
 
         let gpio_efgh = ArcMutexDevice::new(devices::GpioBlock::new(gpio1_irq_tx, ["E", "F", "G", "H"]));
         let gpio_ijkl = ArcMutexDevice::new(devices::GpioBlock::new(gpio2_irq_tx, ["I", "J", "K", "L"]));
@@ -126,6 +166,7 @@ impl PP502xBus {
             gpio_mirror_ijkl: GpioBlockAtomicMirror::new(gpio_mirror_ijkl),
             dmacon0,
             dmacon1,
+            debug_button_irq: debug_button_irq_tx,
             scroll: ScrollWheel::new(),
             opto,
             pwmcon: PWMCon::new(),

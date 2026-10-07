@@ -25,6 +25,7 @@ pub struct PP5002Bus {
     pub scroll: devices::ScrollWheel,
     pub firewire: devices::TSB43AA82,
     pub unk4000: devices::Unk5002_4000,
+    pub debug_button_irq: irq::Sender,
 }
 
 impl Deref for PP5002Bus {
@@ -47,6 +48,8 @@ impl PP5002Bus {
         dma_pending: irq::Pending,
         flash_rom: Option<Box<[u8]>>,
     ) -> PP5002Bus {
+        let (debug_button_irq_tx, debug_button_irq_rx) = irq::new(irq_pending.clone(), "DEBUG: button press (Hold-key hijack)");
+
         let mut core = PpCore::new(
             model,
             task_spawner.clone(),
@@ -65,6 +68,30 @@ impl PP5002Bus {
             .register(14, core.gpio0_irq_rx.clone())
             // .register(30, dma_irq_rx) // dma out
             // .register(31, dma_irq_rx) // dma in
+
+            // .register(0, debug_button_irq_rx.clone()) // HACK
+            // .register(2, debug_button_irq_rx.clone()) // HACK
+            // .register(3, debug_button_irq_rx.clone()) // HACK
+            // .register(6, debug_button_irq_rx.clone()) // HACK
+            // .register(8, debug_button_irq_rx.clone()) // HACK
+            // .register(9, debug_button_irq_rx.clone()) // HACK
+            // .register(10, debug_button_irq_rx.clone()) // HACK
+            // .register(13, debug_button_irq_rx.clone()) // HACK
+            // .register(15, debug_button_irq_rx.clone()) // HACK
+            // .register(16, debug_button_irq_rx.clone()) // HACK
+            // .register(17, debug_button_irq_rx.clone()) // HACK
+            // .register(18, debug_button_irq_rx.clone()) // HACK
+            // .register(19, debug_button_irq_rx.clone()) // HACK
+            // .register(20, debug_button_irq_rx.clone()) // HACK
+            // .register(21, debug_button_irq_rx.clone()) // HACK
+            // .register(22, debug_button_irq_rx.clone()) // HACK
+            // .register(23, debug_button_irq_rx.clone()) // HACK
+            // .register(24, debug_button_irq_rx.clone()) // HACK
+            // .register(25, debug_button_irq_rx.clone()) // HACK
+            // .register(26, debug_button_irq_rx.clone()) // HACK
+            // .register(27, debug_button_irq_rx.clone()) // HACK
+            // .register(28, debug_button_irq_rx.clone()) // HACK
+            // .register(29, debug_button_irq_rx.clone()) // HACK
             ;
 
         use devices::*;
@@ -76,6 +103,7 @@ impl PP5002Bus {
             scroll: ScrollWheel::new(),
             firewire: TSB43AA82::new(),
             unk4000: Unk5002_4000::new(),
+            debug_button_irq: debug_button_irq_tx,
         }
     }
 
