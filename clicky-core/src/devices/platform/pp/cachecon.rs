@@ -50,6 +50,7 @@ impl Memory for CacheCon {
             }
             0x04 => Err(StubRead(Warn, 0)), // pp5002 cache
             0x08 => Err(StubRead(Warn, 0)), // pp5002 cache
+            0x0c => Err(StubRead(Warn, 0)), // pp5002 cache
             0x10 => Err(InvalidAccess),
             0x34 => Err(InvalidAccess),
             _ => Err(Unexpected),
@@ -64,6 +65,7 @@ impl Memory for CacheCon {
                 Err(StubWrite(Error, ()))
             }
             0x04 => Err(StubWrite(Error, ())), // pp5002 cache
+            0x0c => Err(StubWrite(Error, ())), // pp5002 cache
             0x10 => Err(StubWrite(Error, ())),
             0x34 => Err(StubWrite(Error, ())),
             _ => Err(Unexpected),

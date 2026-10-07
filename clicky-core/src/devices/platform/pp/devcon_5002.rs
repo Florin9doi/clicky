@@ -84,6 +84,8 @@ impl Memory for DevCon5002 {
             0x08 => Err(StubRead(Error, self.reset[1])),
             0x0c => Ok(self.enable[0]),
             0x10 => Ok(self.enable[1]),
+            0x18 => Err(StubRead(Trace, 0)),
+            0x1c => Err(StubRead(Trace, 0)),
             0x20 => Ok(self.clock_source),
             0x2c => Err(StubRead(Error, 0)),
             0x30 => Err(StubRead(Error, self.reset[0])),

@@ -43,6 +43,7 @@ impl Memory for Unk5002_4000 {
             0x08 => Err(StubWrite(Trace, ())),
             0x10 => Err(StubWrite(Trace, ())),
             0x14 => Err(StubWrite(Trace, ())),
+            0x18 => Err(StubWrite(Trace, ())),
             0x1c => Err(StubWrite(Trace, ())),
             _ => Err(Unexpected)
         }
