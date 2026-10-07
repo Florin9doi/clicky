@@ -61,9 +61,7 @@ struct IntCon32 {
     cpu: IntConCpuRegs,
     cop: IntConCpuRegs,
     _int_stat: u32,
-    _int_forced_stat: u32,
-    _int_forced_set: u32,
-    _int_forced_clr: u32,
+    int_forced: u32,
 }
 
 impl IntCon32 {
@@ -75,9 +73,7 @@ impl IntCon32 {
             cpu: IntConCpuRegs::default(),
             cop: IntConCpuRegs::default(),
             _int_stat: 0,
-            _int_forced_stat: 0,
-            _int_forced_set: 0,
-            _int_forced_clr: 0,
+            int_forced: 0,
         }
     }
 
@@ -199,7 +195,7 @@ impl Memory for IntCon32 {
             0x0c => Ok(self.cop.fiq_stat),
 
             0x10 => Err(Unimplemented),
-            0x14 => Err(Unimplemented),
+            0x14 => Err(StubRead(Error, self.int_forced)),
             0x18 => Err(Unimplemented),
             0x1c => Err(Unimplemented),
 
@@ -228,8 +224,8 @@ impl Memory for IntCon32 {
 
             0x10 => Err(Unimplemented),
             0x14 => Err(Unimplemented),
-            0x18 => Err(Unimplemented),
-            0x1c => Err(StubWrite(Error, ())), // TODO: figure out what this does
+            0x18 => Err(StubWrite(Error, self.int_forced |= val )),
+            0x1c => Err(StubWrite(Error, self.int_forced &= !val )),
 
             0x20 => Err(InvalidAccess),
             0x24 => Ok(self.cpu.enabled |= val),
