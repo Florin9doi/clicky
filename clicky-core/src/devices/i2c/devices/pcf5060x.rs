@@ -304,6 +304,8 @@ impl Pcf5060xImpl {
             2 => 621, // ADCIN1, resistive divider
             3 => 621, // ADCIN1, substractor
             4 => 385, // BATTEMP, radiometric
+            5 => 123, // ADCIN2
+            6 => 456, // ADCIN3
             7 => 255, // ADCIN3, radiometric
             _ => return Err(Unimplemented),
         };
