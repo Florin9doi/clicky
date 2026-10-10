@@ -24,6 +24,7 @@ pub struct PP5002Bus {
 
     pub scroll: devices::ScrollWheel,
     pub firewire: devices::TSB43AA82,
+    pub usb: devices::Usb5002,
     pub unk4000: devices::Unk5002_4000,
     pub debug_button_irq: irq::Sender,
 }
@@ -102,6 +103,7 @@ impl PP5002Bus {
             ppver: PpVer5002::new(),
             scroll: ScrollWheel::new(),
             firewire: TSB43AA82::new(),
+            usb: Usb5002::new(),
             unk4000: Unk5002_4000::new(),
             debug_button_irq: debug_button_irq_tx,
         }
@@ -238,7 +240,7 @@ mmap! {
         0xc000_6000..=0xc000_603f => serial0,
         0xc000_6040..=0xc000_607f => serial1,
         0xc000_8000..=0xc000_801f => i2ccon,
-        0xc000_8020..=0xc000_803f => total_mystery, // audio?
+        0xc000_8020..=0xc000_803f => usb,
         0xc400_0000..=0xc400_000f => cpuid,
         0xcf00_0000..=0xcf00_007f => gpio_abcd,
         0xcf00_1000..=0xcf00_10ff => intcon,

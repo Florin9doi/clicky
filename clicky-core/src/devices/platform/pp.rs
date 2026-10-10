@@ -33,6 +33,7 @@ mod ppver_5002;
 mod scroll;
 mod tsb43aa82;
 mod unk_5002_4000;
+mod usb_5002;
 
 pub use cachecon::*;
 pub use cfg_timer::*;
@@ -67,6 +68,7 @@ pub use ppver_5002::*;
 pub use scroll::*;
 pub use tsb43aa82::*;
 pub use unk_5002_4000::*;
+pub use usb_5002::*;
 
 pub mod common {
     #[derive(Debug, Copy, Clone, PartialEq, Eq)]
