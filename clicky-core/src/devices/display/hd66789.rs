@@ -117,20 +117,20 @@ impl Hd66789 {
                 }
             }
             true => { // top to bottom
-                if ireg.vertical_increment == 1 {
-                    ireg.cur_y += 1;
-                    if ireg.cur_y >= height {
-                        ireg.cur_y = 0;
-                        ireg.cur_x += ireg.horizontal_increment as usize;
-                    }
-                } else { // bottom to top
+                // if ireg.vertical_increment == 1 {
+                //     ireg.cur_y += 1;
+                //     if ireg.cur_y >= height {
+                //         ireg.cur_y = 0;
+                //         ireg.cur_x += ireg.horizontal_increment as usize;
+                //     }
+                // } else { // bottom to top
                     if ireg.cur_y == 0 {
                         ireg.cur_y = height - 1;
                         ireg.cur_x += ireg.horizontal_increment as usize;
                     } else {
                         ireg.cur_y -= 1;
                     }
-                }
+                // }
             }
         }
     }
@@ -196,6 +196,7 @@ impl Hd66789 {
     fn handle_data_write(&mut self, val: u16) {
         let mut ireg = self.ireg.write().unwrap();
         match ireg.cmd {
+            0x21 => {}
             0x22 => {}
             _ => {debug!(target: "LCD", "write_data cmd:{:x} val:0x{:x}({})", ireg.cmd, val, val);}
         }
@@ -216,6 +217,9 @@ impl Hd66789 {
             0x21 => {
                 ireg.cur_x = val.get_bits(0..=7) as usize - ireg.hsa;
                 ireg.cur_y = val.get_bits(8..=15) as usize - ireg.vsa;
+                // if ireg.vertical_increment == 1 {
+                //     ireg.cur_y = ireg.vea - val.get_bits(8..=15) as usize;
+                // }
             }
             // Write Data to GRAM
             0x22 => {
