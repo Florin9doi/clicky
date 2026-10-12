@@ -7,12 +7,13 @@ pub struct PpVer5002 {
 
 impl PpVer5002 {
     const VERSION_SELECTION: usize = 3;
-    const VERSIONS: [[u8; 8]; 5] = [
+    const VERSIONS: [[u8; 8]; 6] = [
         *b"TANGO-51",
         *b"PP5001E1",
         *b"PP5001E3",
         *b"PP5002E0",
         *b"PP5002C\0",
+        *b"PP5002D ",
     ];
 
     pub fn new() -> PpVer5002 {
