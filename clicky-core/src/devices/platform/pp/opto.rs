@@ -122,6 +122,12 @@ impl Memory for OptoWheel {
                     .set_bit(3, controls.down.asserted())
                     .set_bit(4, controls.up.asserted());
 
+                if matches!(command, Some(cmd) if cmd & 0xffff == 0x003a) {
+                    return Err(StubRead(Trace, 0x8000_003a));
+                }
+                if matches!(command, Some(cmd) if cmd & 0xffff == 0x013a) {
+                    return Err(StubRead(Trace, 0x8602_013a)); // checked by 4g color diag menu
+                }
                 // iPod 4G bootloader requests `0x023a` and looks for that
                 // signature in bits 31 + 0..15, having masked out 16..30; it
                 // then takes the buttons from bits 16..20. Rockbox knows this
@@ -129,7 +135,16 @@ impl Memory for OptoWheel {
                 // button-clickwheel.c (even though Rockbox only checks for
                 // this value for S5L iPods, not PP ones)
                 if matches!(command, Some(cmd) if cmd & 0xffff == 0x023a) {
-                    return Err(StubRead(Debug, 0x8000_023a | (buttons << 16)));
+                    return Err(StubRead(Trace, 0x8000_023a | (buttons << 16)));
+                }
+                if matches!(command, Some(cmd) if cmd & 0xffff == 0x033a) {
+                    return Err(StubRead(Trace, 0x8000_033a));
+                }
+                if matches!(command, Some(cmd) if cmd & 0xffff == 0x043a) {
+                    return Err(StubRead(Trace, 0x8000_043a));
+                }
+                if matches!(command, Some(cmd) if cmd & 0xffff == 0x053a) {
+                    return Err(StubRead(Trace, 0x8000_053a));
                 }
 
                 let val = *0u32
