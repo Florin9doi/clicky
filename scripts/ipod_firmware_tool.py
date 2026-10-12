@@ -310,7 +310,7 @@ IPOD_MODELS: dict[str, ModelInfo] = {
     "5g":       ModelInfo(0x4000, "5g"),
     "mini1g":   ModelInfo(0x2000, "mini1g"),
     "mini2g":   ModelInfo(0x2000, "mini2g"),
-    "nano1g":   ModelInfo(0x4000, "nano1g"),
+    "nano1g":   ModelInfo(0x2000, "nano1g"),
 }
 
 # A few convenience aliases so common ways of typing a model still work.
