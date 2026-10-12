@@ -512,11 +512,10 @@ impl System {
             // hwid = 0x60000, gpio ignored -> photo (early) display
             // ipod color
             // hwid = 0x60014, check gpio:
-                                    // 0x00 -> photo (early) display
+                                    // 0x00 -> photo (early) display - Sharp
                                     // 0x02 -> photo (early) display
-                                    // 0x10 -> hd.89
-                                    // 0x12 -> 4rd display? hd.89-like
-            // ipod nano -> hd.89
+                                    // 0x10 -> hd.89                 - LG
+                                    // 0x12 -> 4rd display? hd.89-like - Toshiba
             let (mut gpio_tx, gpio_rx) = gpio::new(gpio_changed.clone(), "Display");
             let mut gpio_abcd = sys.devices.gpio_abcd().lock().unwrap();
             // gpio_abcd.register_in(1, gpio_rx.clone()); // 0x02
@@ -524,10 +523,18 @@ impl System {
             gpio_tx.set_high();
         }
         if model.alias == "nano1g" {
+            {
+            // ipod nano -> hd.89
             let (mut gpio_tx, gpio_rx) = gpio::new(gpio_changed.clone(), "Display");
             let mut gpio_abcd = sys.devices.gpio_abcd().lock().unwrap();
-            gpio_abcd.register_in(1, gpio_rx.clone());
+            gpio_abcd.register_in(1, gpio_rx.clone()); // LCD ID += 0x10
             gpio_tx.set_high();
+            }{
+            let (mut gpio3_tx, gpio3_rx) = gpio::new(gpio_changed.clone(), "Display");
+            let mut gpio_ijkl = sys.devices.gpio_block(GpioBlockId::Ijkl).expect("xxx").lock().unwrap();
+            gpio_ijkl.register_in(3*8 + 6, gpio3_rx.clone()); // LCD ID += 0x01
+            gpio3_tx.set_high();
+            }
         }
 
         // sandbox
