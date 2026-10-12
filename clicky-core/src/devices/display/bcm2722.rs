@@ -119,6 +119,13 @@ impl Memory for Bcm2722 {
             }
             READ_ADDR => {
                 match val {
+                    0x1000_2824 => {
+                        self.read_latch_hi = Some(0x000c_0000); // 5gvideo -> LCD ID = 1 (SHP)
+                        // self.read_latch_hi = Some(0x0008_0000); // 5gvideo -> LCD ID = 2 (TSB)
+                        // self.read_latch_hi = Some(0x0004_0000); // 5gvideo -> LCD ID = 3 (SAM)
+                        // self.read_latch_hi = Some(0x0000_0000); // 5gvideo -> LCD ID = 4 (ERR)
+                        return Ok(());
+                    }
                     0x01f8_0000 | 0x0c00_1000 => {
                         self.read_latch_hi = Some(1);
                         return Ok(());
