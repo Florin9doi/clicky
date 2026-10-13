@@ -124,10 +124,12 @@ impl Hd66xxx {
 
     fn make_render_callback(&self) -> RenderCallback {
         let gram = Arc::clone(&self.gram);
+        let ireg = Arc::clone(&self.ireg);
         Box::new(move |buf: &mut Vec<u32>| -> (usize, usize) {
             let gram = *gram.read().unwrap();
+            let ireg = *ireg.read().unwrap();
             let new_buf = gram.iter().map(|&px| {
-                let p = px.rotate_left(8);
+                let p = if ireg.mirror { px } else { px.rotate_left(8) };
                 0xff000000
                     | (((p & 0xf800) as u32) << 8)
                     | (((p & 0x07e0) as u32) << 5)
