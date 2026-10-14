@@ -127,7 +127,6 @@ impl Bcm2722Panel {
 }
 
 impl LcdPanel for Bcm2722Panel {
-
     fn read_data32(&mut self) -> MemResult<u32> {
         Ok(1)
     }
@@ -142,18 +141,12 @@ impl LcdPanel for Bcm2722Panel {
 
     fn write_data32(&mut self, val: u32) -> MemResult<()> {
         let mut ireg = self.ireg.write().unwrap();
-        let index = (ireg.cmd >> 2) - 0x3_8000;
 
         // match ireg.cmd {
-        //     0xe0000 => {}
-        //     0x62 => {}
-        //     _ => {trace!(target: "LCD", "write_data ireg:{:x}/{:x} val:0x{:x}({})", ireg.cmd, index, val, val);}
+        //     1..=4 => {debug!(target: "LCD", "write_data cmd:{:x} val:0x{:x}({})", ireg.cmd, val, val);}
+        //     _ => {}
         // }
-        // match index {
-        //     8 ..= 76800 => {}
-        //     0..=7 | _ => {trace!(target: "LCD", "write_data cmd:{:x}/{:x} val:0x{:x}({})", ireg.cmd, index, val, val);}
-        // }
-        match index {
+        match ireg.cmd {
             1 => {
                 ireg.x_start = val as usize;
                 ireg.cur_x = 0;
@@ -164,7 +157,7 @@ impl LcdPanel for Bcm2722Panel {
             }
             3 => ireg.x_end = val as usize,
             4 => ireg.y_end = val as usize,
-            0 | 8 ..= 153608 => { // 8 .. (8 + 320x240x2)
+            0 | 5 => {
                 drop(ireg);
                 self.write_ram(val);
             }

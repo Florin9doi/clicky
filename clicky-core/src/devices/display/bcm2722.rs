@@ -13,9 +13,10 @@ const HANDSHAKE: u32 = 0x70000;
 pub struct Bcm2722 {
     write_addr_latch: Option<u16>,
     read_latch: Option<u16>,
-    read_latch_hi: Option<u32>,
-    addr: u32,
-
+    raddr: u32,
+    waddr: u32,
+    cmd: u32,
+    cmd05_index: u32,
     panel: Box<dyn LcdPanel>,
 }
 
@@ -24,14 +25,120 @@ impl Bcm2722 {
         Bcm2722 {
             write_addr_latch: None,
             read_latch: None,
-            read_latch_hi: None,
-            addr: 0,
+            raddr: 0,
+            waddr: 0,
+            cmd: 0,
+            cmd05_index: 0,
             panel,
         }
     }
 
     pub fn render_callback(&self) -> RenderCallback {
         self.panel.render_callback()
+    }
+
+    fn read_mem(&mut self, offset: u32) -> MemResult<u32> {
+        let val = match offset {
+            DATA => {
+                match self.raddr {
+                    0x1f8 => 1,
+                    0x1fc => 0,
+                    0x1000_0c00 => 1,
+                    0x1000_2800 => 0,
+                    0x1000_2804 => 0, // diag mode - tv out
+                    0x1000_280c => 0,
+                    0x1000_2824 => 0x0004_0000, // LCD ID
+                                // 0x000c_0000 -> LCD ID = 1 (SHP)
+                                // 0x0008_0000 -> LCD ID = 2 (TSB)
+                                // 0x0004_0000 -> LCD ID = 3 (SAM)
+                                // 0x0000_0000 -> LCD ID = 4 (ERR)
+                    _ => {
+                        {debug!(target: "LCD", "      read_mem : ({}) addr:{:x} val:{:x}", self.probe(offset), self.raddr, 0xdead_deadu32);}
+                        0xdead_dead
+                    }
+                }
+            }
+            STATUS => 0x0013,
+            WRITE_ADDR | READ_ADDR | 0x40000 | 0x50000 | READY => 0x0001,
+            HANDSHAKE => 0x0040,
+            _ => 0x0000,
+        };
+        // if offset != STATUS {debug!(target: "LCD", "    read_mem : ({}) addr:{:x} val:{:x}", self.probe(offset), offset, val);}
+        Ok(val)
+    }
+
+    fn write_mem(&mut self, offset: u32, val: u32) -> MemResult<()> {
+        // if offset != 0
+        // {debug!(target: "LCD", "    write_mem : addr:{:x} val:0x{:x}({})", offset, val, val);}
+        match offset {
+            WRITE_ADDR => {
+                self.waddr = val;
+                Err(StubWrite(Trace, ()))
+            }
+            READ_ADDR => {
+                self.raddr = val;
+                Err(StubWrite(Trace, ()))
+            }
+            DATA | 0x40000 | 4 => {
+                // if self.waddr & 0x000e_000f == 0x000e_0002
+                // {debug!(target: "LCD", "    write_mem : addr:{:x} val:0x{:x}({})", self.waddr, val, val);}
+                match self.waddr {
+                    0x0000 => { // load firmware
+                        // diag mode -> 0x16000 bytes from NOR 0xa1f44-0xb7f43
+                        // let _ = Self::append_firmware(val);
+                        Ok(())
+                    }
+                    0x01f8 => { // cmd
+                        self.cmd = val & 0xffff;
+                        match self.cmd {
+                            0x00 => { // full frame
+                                // these are not real lcd commands but we're not running the bcm firmware
+                                let _ = self.panel.write_command32(1);
+                                let _ = self.panel.write_data32(0);
+                                let _ = self.panel.write_command32(2);
+                                let _ = self.panel.write_data32(0);
+                                let _ = self.panel.write_command32(3);
+                                let _ = self.panel.write_data32(320 - 1);
+                                let _ = self.panel.write_command32(4);
+                                let _ = self.panel.write_data32(240 - 1);
+                                let _ = self.panel.write_command32(self.cmd);
+                            }
+                            0x05 => { // window
+                                self.cmd05_index = 0;
+                            }
+                            _ => {}
+                        }
+                        Ok(())
+                    }
+                    0x000e_0000 ..= 0x001f_0000 => { // lcd data
+                        if self.cmd == 0x05 && self.cmd05_index >= 1 && self.cmd05_index <= 4 {
+                            let _ = self.panel.write_command32(self.cmd05_index);
+                            let _ = self.panel.write_data32(val);
+                            self.cmd05_index += 1;
+                        }
+                        else if self.cmd == 0x05 && self.cmd05_index < 8 {
+                            let _ = self.panel.write_command32(self.cmd);
+                            // ignore data
+                            self.cmd05_index += 1;
+                        } else {
+                            let _ = self.panel.write_data32(val);
+                        }
+                        Ok(())
+                    }
+                    0xc020_0000 ..= 0xc02f_0000 => { // diag mode - tv out
+                        // NTSC -> BMP file incl the header, 720 x 480 x 24 BPP
+                        // PAL  -> BMP file incl the header, 720 x 576 x 24 BPP
+                        // let _ = Self::append_tvout(val);
+                        Ok(())
+                    }
+                    _ => {
+                        {debug!(target: "LCD", "    write_mem : addr:{:x} val:0x{:x}({})", self.waddr, val, val);}
+                        Ok(())
+                    }
+                }
+            }
+            _ => Err(StubWrite(Error, ())),
+        }
     }
 }
 
@@ -56,91 +163,63 @@ impl Device for Bcm2722 {
 }
 
 impl Memory for Bcm2722 {
+    fn w8(&mut self, offset: u32, val: u8) -> MemResult<()> { // used with dma by retailos
+        let val = match self.write_addr_latch.take() {
+            None => {
+                self.write_addr_latch = Some(val as u16);
+                return Ok(());
+            }
+            Some(lo) => (lo as u32) | (val as u32) << 8,
+        };
+        // {debug!(target: "LCD", "w8 offset:{:x} val:0x{:x}({})", offset, val, val);}
+        let _ = offset;
+        let _ = self.panel.write_command32(0x000e_0000);
+        self.panel.write_data32(val as u32)
+        // self.w16(offset, val)
+        // self.w16(DATA, val as u16)
+        // Ok(())
+    }
+
     fn r16(&mut self, offset: u32) -> MemResult<u16> {
+        // {debug!(target: "LCD", "r16 ({}) offset:{:x}", self.probe(offset), offset);}
         if let Some(val) = self.read_latch.take() {
-            return Ok(val as u16);
+            return Ok(val);
         }
 
-        let val = match offset {
-            DATA => {
-                if let Some(val) = self.read_latch_hi.take() {
-                    self.read_latch = Some((val >> 16) as u16); 
-                    return Ok(val as u16);
-                }
-                let data32: u32 = match self.panel.read_data32() {
-                    Ok(v) => v,
-                    Err(_) => 0,
-                };
-                self.read_latch = Some((data32 >> 16) as u16); 
-                data32 as u16
-            }
-            STATUS => 0x0013,
-            WRITE_ADDR | READ_ADDR | 0x40000 | 0x50000 | READY => 0x0001,
-            HANDSHAKE => 0x0040,
-            _ => 0x0000,
-        };
+        if offset == DATA  {
+            let val = self.read_mem(offset)?;
+            self.read_latch = Some((val >> 16) as u16);
+            return Ok(val as u16);
+        }
+        let val = self.read_mem(offset)?;
         Ok(val as u16)
     }
 
-    fn r32(&mut self, offset: u32) -> MemResult<u32> {
-        let val = match offset {
-            DATA => {
-                match self.panel.read_data32() {
-                    Ok(v) => v,
-                    Err(_) => 0,
-                }
+    fn w16(&mut self, offset: u32, val: u16) -> MemResult<()> {
+        // {debug!(target: "LCD", "w16 ({}) offset:{:x} val:0x{:x}({})", self.probe(offset), offset, val, val);}
+        match offset {
+            DATA | WRITE_ADDR | READ_ADDR => {
+                let val = match self.write_addr_latch.take() {
+                    None => {
+                        self.write_addr_latch = Some(val);
+                        return Ok(());
+                    }
+                    Some(lo) => (lo as u32) | ((val as u32) << 16),
+                };
+
+                self.write_mem(offset, val)
             }
-            STATUS => 0x0013,
-            WRITE_ADDR | READ_ADDR | 0x40000 | 0x50000 | READY => 0x0001,
-            HANDSHAKE => 0x0040,
-            _ => 0x0000,
-        };
-        Ok(val)
+            _ => Ok(()),
+        }
     }
 
-    fn w16(&mut self, offset: u32, val: u16) -> MemResult<()> {
-        let val = match self.write_addr_latch.take() {
-            None => {
-                self.write_addr_latch = Some(val);
-                return Ok(());
-            }
-            Some(lo) => (lo as u32) | (val as u32) << 16,
-        };
-
-        self.w32(offset, val)
+    fn r32(&mut self, offset: u32) -> MemResult<u32> {
+        // {debug!(target: "LCD", "r32 ({}) offset:{:x}", self.probe(offset), offset);}
+        self.read_mem(offset)
     }
 
     fn w32(&mut self, offset: u32, val: u32) -> MemResult<()> {
-        match offset {
-            WRITE_ADDR => {
-                self.addr = val;
-                let _ = self.panel.write_command32(val);
-                Err(StubWrite(Trace, ()))
-            }
-            READ_ADDR => {
-                match val {
-                    0x1000_2824 => {
-                        self.read_latch_hi = Some(0x000c_0000); // 5gvideo -> LCD ID = 1 (SHP)
-                        // self.read_latch_hi = Some(0x0008_0000); // 5gvideo -> LCD ID = 2 (TSB)
-                        // self.read_latch_hi = Some(0x0004_0000); // 5gvideo -> LCD ID = 3 (SAM)
-                        // self.read_latch_hi = Some(0x0000_0000); // 5gvideo -> LCD ID = 4 (ERR)
-                        return Ok(());
-                    }
-                    0x01f8_0000 | 0x0c00_1000 => {
-                        self.read_latch_hi = Some(1);
-                        return Ok(());
-                    }
-                    _ => Err(StubWrite(Trace, ())),
-                }
-            }
-            DATA | 4 | 0x40000 => {
-                if self.addr & 0x1f_0000 != 0 {
-                    self.panel.write_data32(val)
-                } else {
-                    return Ok(());
-                }
-            }
-            _ => Err(StubWrite(Error, ())),
-        }
+        // {debug!(target: "LCD", "w32 ({}) offset:{:x} val:0x{:x}({})", self.probe(offset), offset, val, val);}
+        self.write_mem(offset, val)
     }
 }
