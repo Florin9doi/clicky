@@ -2,6 +2,28 @@ use crate::devices::prelude::*;
 use crate::gui::RenderCallback;
 use crate::devices::display::LcdPanel;
 
+/*
+The first layer (L1) is to combine 2x16b values (and possibly 8b values, TBD) into 32b values.
+ - Only the data/raddr/waddr values are split (32b long).
+ - The handshake/status/ready are handled in a single 16b or 32b request (16b long).
+The second layer is a transaction, like:
+ - read handshake
+ - write raddr / write waddr (2x16/1x32)
+ - read status until status is OK
+ - read data / write data (2x16/1x32)
+The L2 goal, ignoring the noise, is to read/write data such:
+ - write 0x0 - write firmware
+ - write 0x1f8 - set command
+ - read 0x1000_2824 - read LCD ID
+ - write 0xe0000 - set cmd args / LCD data
+ - write 0xc020_0000 - write tv-out data
+ The third layer combines multiple L2 operations:
+ - set command id (0x1f8) to 0 (update full frame), then send data corresponding to cmd0 to 0xe0000
+ - set command id (0x1f8) to 5 (update window), then send args/data corresponding to cmd5 to 0xe0000
+   - These parameters are not actual LCD controller commands; those are probably generated internally by the BCM firmware.
+   - Instead, they provide an abstraction layer between the PP5022 and BCM2722, regardless of the connected display.
+*/
+
 const DATA: u32 = 0x00000;
 const WRITE_ADDR: u32 = 0x10000;
 const READ_ADDR: u32 = 0x20000;
