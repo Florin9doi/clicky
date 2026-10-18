@@ -84,8 +84,9 @@ impl Memory for ColorLcdBridge {
             }
             0x100 => {
                 if self.config.get_bit(16) {
-                    if self.config.get_bit(1) {
-                        // a bit chosen randomly between 0xcc010001 (w8) vs 0xc0010167/0xc0013547/0xc0013cef/0xc001f937 (2x w16)
+                    if !self.config.get_bit(26) {
+                        // a bit chosen randomly between 0xcc010001 (w8-w8) vs 0xc0010167/0xc0013547/0xc0013cef/0xc001f937 (2x w16)
+                        // Could b26 and b27 be width and byteswap?
                         let _ = self.panel.write_data(val as u16);
                         let _ = self.panel.write_data((val >> 16) as u16);
                     } else {
