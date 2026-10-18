@@ -62,8 +62,9 @@ impl Device for PPCon {
 impl Memory for PPCon {
     fn r32(&mut self, offset: u32) -> MemResult<u32> {
         match offset {
-            0x00 => Ok(u32::from_le_bytes(*b"PP50")),
-            0x04 => Ok(u32::from_le_bytes(*b"20D ")),
+            // 0x00 => Ok(u32::from_le_bytes(*b" A22")),
+            0x00 => Ok(u32::from_le_bytes(*b" A02")),
+            0x04 => Ok(u32::from_le_bytes(*b"05PP")),
             0x08 => Err(StubRead(Info, self.bootstrap_maybe[0])),
             0x0c => Err(StubRead(Info, self.bootstrap_maybe[1])),
             0x10 => Err(StubRead(Info, self.dev_init[0])),
