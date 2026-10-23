@@ -25,110 +25,28 @@ Here are some clips:
 <table>
   <tr>
     <td><img width="320px" src="screenshots/clicky-retailos.gif" alt="clicky running RetailOS"></td>
+    <td><img width="320px" src="screenshots/clicky-1g.png"></td>
   </tr>
   <tr>
     <td width="320px">Playing Brick in <code>RetailOS</code></td>
+    <td width="320px">RetailOS 1.0</code></td>
+  </tr>
+</table>
+<table>
+  <tr>
+    <td><img width="320px" src="screenshots/clicky-4gc.png"></td>
+    <td><img width="320px" src="screenshots/clicky-n1.png"></td>
+  </tr>
+  <tr>
+    <td width="320px">iPod Color</code></td>
+    <td width="320px">iPod Nano</code></td>
   </tr>
 </table>
 
-**This project is not ready for general use yet!**
-
-`clicky` is still in it's early stages, and there hasn't been much effort put into making it easy to use.
-
-## Call for Contributors!
-
-Up until now, `clicky` has been a one-man hobby project, and while it's been a great way to kill time during my impromptu COVID-induced "staycation" that spanned the months between University graduation and starting full time work, I won't have too much time to dedicate to `clicky` moving forwards.
-
-As such, I'm hoping to find a couple folks out there who might be interested in pushing this project forwards!
-
-I've tried to keep the project as clean and well organized as possible, with plenty of inline comments and documentation. I've also included detailed developer-focused documentation under the `docs` folder.
-
-Additionally, I've kept collected a fairly extensive corpus of iPod documentation / test software which is included in-tree under the `resources` folder.
-
-**If you're interested in emulating an iconic piece of early 2000s pop-culture, don't hesitate to get in touch!**
-
----
-
-Are you someone with strong **reverse engineering** experience and wants to help preserve an iconic piece of early 2000s pop-culture? If so, read on!
-
-While I expect that I'll be able to get Rockbox and iPodLinux up and running, I worry that getting Apple's RetailOS working may prove difficult. While lots of reverse-engineering work has already been done by the iPodLinux and Rockbox projects back around 2007, it seems that there are still plenty of registers / memory blocks whose purpose is unknown. `clicky` can already boot into RetailOS, and I'm noticing lots of accesses to undocumented parts of the PP5020 memory space.
-
-Fortunately, now that we're living in 2020 (i.e: the future), we have access to newer, better tools that can aid in reverse-engineering the iPod. Free and powerful reverse engineering tools (like [Gridra](https://ghidra-sre.org/)), and emulation software (`clicky` itself) aught to make it easier to inspect and observe the state of the RetailOS binaries while they're being run, and gain insight into what the hardware is supposed to do.
-
-I've got some reverse engineering experience, but truth be told, it's not really my forte, so if you're interested in helping out, please get in touch!
-
----
-
 ## Roadmap
 
--   [x] Execute something _really_ basic, such as https://github.com/iPodLinux/ipodloader/
-    -   This rough-little bit of software is simple enough to step through and understand fully, making it a great launching off point for the project.
-    -   It touches quite a bit of iPod-specific hardware (e.g: Timers, Buttons, LCD)
-    -   **Goals:**
-        -   Find my footing with the ARM7TDMI CPU, and the iPod's funky dual-processor architecture
-        -   Get more familiar with the ARM7TDMI assembler and compiler toolchain
-        -   Set up project boilerplate
-            -   Memory interconnect framework
-            -   LCD output, button input
-            -   basic CLI
-        -   Scaffold basic system architecture (step through CPU, system memory map, interact with devices)
--   [x] Get through the more complex https://github.com/iPodLinux/ipodloader2/
-    -   Touches even _more_ iPod-specific hardware (ATA-2)
-    -   Seems to do more in-depth system init (i.e: interrupt handling, memory mapping)
-    -   **Goals:**
-        -   Expand on the system architecture + implemented devices
-
-Stage 2 will be to running some popular open-source iPod alternative firmwares, such as Rockbox and iPodLinux.
-Since these projects are open source, is should be possible to trace through the code, making implementing devices / debugging issues a lot easier.
-
--   [x] Boot into [Rockbox](https://www.rockbox.org/)
-    -   A gargantuan task, one which will involve implementing a _lot_ of misc. hardware
-    -   **Goals:**
-        -   Boot an actual OS on the iPod
--   [x] Boot into [iPod Linux](http://www.ipodlinux.org/)
-    -   A bigger beast than Rockbox, and likely much more difficult to step through and debug
-    -   **Goals:**
-        -   Boot _another_ actual OS on the iPod
-        -   Fill in the gaps between the hardware Rockbox uses, and the hardware iPod Linux uses
-
-Stage 3 will involve running closed-source Apple software, notably, the original iPod RetailOS:
-
--   [ ] Boot / pass the Apple Diagnostics program
-    -   If you press and hold the Select+Prev while an iPod is booting up, a diagnostics program built directly into the Flash ROM is executed!
-    -   This would likely be the first closed source software the emulator runs.
-    -   Makes for a great playground to poke at the various hardware features that exist on the iPod, without worrying too much about an OS scheduler getting in the way.
-    -   **Goals:**
-        -   Run some closed source software
-    -   **Progress:**
-        -   [x] Boot into diagnostics
-        -   [ ] 5 IN 1
-        -   [x] RESET
-        -   [x] KEY
-        -   [x] CHGR CURR
-        -   [ ] REMOTE
-        -   [x] HP STATUS
-        -   [ ] SLEEP
-        -   [x] BATT A2D
-        -   [ ] A2D STAT
-        -   [x] FIREWIRE
-        -   [ ] HDD R/W
-        -   [x] SMRT DAT
-        -   [x] HDD SCAN
-        -   [x] READ SN
-        -   [x] DISKMODE
-        -   [ ] WHEEL
-        -   [x] CONTRAST
-        -   [ ] AUDIO
-        -   [x] STATUS
-        -   [x] DRV TEMP
-        -   [ ] IRAM TEST
 -   [x] Boot into RetailOS
-    -   i.e: _the big money goal_
-    -   Hopefully, by getting two other OSs up and running, RetailOS will "just work"
-    -   Realistically, those Apple engineers probably did some fancy/janky stuff, and things will be very broken
-    -   **Goals:**
-        -   Get an actual working emulated iPod up and running!
-        -   Play some authentic Brick Breaker!
+    - done :D
 
 ### Unknowns that might make things tricky
 
