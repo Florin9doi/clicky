@@ -10,6 +10,7 @@ use crate::gui::RenderCallback;
 /// reads return the high byte first and latch the low byte for the next read.
 #[derive(Debug)]
 pub struct ColorLcdBridge {
+    control: u32,
     config: u32,
     write_byte_latch: Option<u32>,
     panel: Box<dyn LcdPanel>,
@@ -18,6 +19,7 @@ pub struct ColorLcdBridge {
 impl ColorLcdBridge {
     pub fn new(panel: Box<dyn LcdPanel>) -> ColorLcdBridge {
         ColorLcdBridge {
+            control: 0,
             config: 0,
             write_byte_latch: None,
             panel,
@@ -54,7 +56,7 @@ impl Memory for ColorLcdBridge {
             0x00 => Err(StubRead(Trace, 0)),
             0x04 => Err(StubRead(Trace, 0)),
             0x0c => Err(StubRead(Trace, 0)),
-            0x20 => Err(StubRead(Trace, 0x0500_0000)),
+            0x20 => Ok(self.control | 0x0500_0000),
             0x24 => Err(StubRead(Trace, self.config)),
             _ => return Err(Unexpected),
         }
@@ -64,7 +66,7 @@ impl Memory for ColorLcdBridge {
         match offset {
             0x00 => Err(StubWrite(Trace, ())),
             0x04 => Err(StubWrite(Trace, ())),
-            0x20 => Err(StubWrite(Trace, ())),
+            0x20 => Err(StubWrite(Trace, self.control = val)),
             0x24 => Err(StubWrite(Trace, self.config = val)),
             0x0c => {
                 match self.write_byte_latch.take() {

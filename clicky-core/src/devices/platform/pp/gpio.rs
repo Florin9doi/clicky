@@ -105,7 +105,9 @@ impl GpioPort {
                 // rising edge trigger
                 true => !prev_level && level,
             };
-            self.interrupt_status.set_bit(i, trigger_irq);
+            if trigger_irq {
+                self.interrupt_status.set_bit(i, true);
+            }
         }
 
         // check if the IRQ line should be asserted / cleared

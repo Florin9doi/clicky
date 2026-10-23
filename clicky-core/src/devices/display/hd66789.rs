@@ -106,7 +106,7 @@ impl Hd66789 {
 
     fn write_ram(&mut self, val: u16) {
         let mut ireg = self.ireg.write().unwrap();
-        if ireg.cur_x < MAX_WIDTH && ireg.cur_y < MAX_HEIGHT {
+        if ireg.cur_x <= ireg.hea && ireg.cur_y <= ireg.vea {
             let idx = ireg.cur_y * MAX_WIDTH + ireg.cur_x;
             self.gram.write().unwrap()[idx] = val;
         }

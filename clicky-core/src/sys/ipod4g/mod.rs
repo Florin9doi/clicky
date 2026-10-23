@@ -1,7 +1,6 @@
 use std::io::{Read, Seek};
 use std::time::Duration;
 use std::collections::HashMap;
-use std::collections::VecDeque;
 
 use armv4t_emu::{reg, Cpu};
 use relativity::Timeout;
@@ -337,7 +336,7 @@ pub struct System {
     reset_requested: std::sync::Arc<std::sync::atomic::AtomicBool>,
 
     executor: Executor,
-    // pub history: VecDeque<u32>,
+    clcd_tx: gpio::Sender,
 }
 
 #[derive(Debug)]
@@ -386,6 +385,7 @@ impl System {
 
         // hook-up external controls
         let (controls_tx, controls_rx) = devices::Controls::new_tx_rx(i2c_changed.clone());
+        let (clcd_tx, clcd_rx) = gpio::new(gpio_changed.clone(), "clcd");
 
         let mut sys = System {
             model: model,
@@ -412,7 +412,7 @@ impl System {
             reset_requested: Default::default(),
 
             executor,
-            // history: VecDeque::with_capacity(100),
+            clcd_tx,
         };
 
         sys.reset_requested = sys.devices.devcon().reset_requested();
@@ -536,6 +536,10 @@ impl System {
             gpio3_tx.set_high();
             }
         }
+        if model.alias == "4gphoto" || model.alias == "4gcolor" || model.alias == "nano1g" {
+            let mut gpio_abcd = sys.devices.gpio_abcd().lock().unwrap();
+            gpio_abcd.register_in(0, clcd_rx.clone());
+        }
 
         // sandbox
         {
@@ -621,11 +625,21 @@ impl System {
         mut sniff_memory: (&[u32], impl FnMut(CpuId, MemAccess)),
     ) -> FatalMemResult<bool> {
 
-        let pc = self.cpu.reg_get(self.cpu.mode(), reg::PC);
-        // if self.history.len() == 100 {
-        //     self.history.pop_front();
-        // }
-        // self.history.push_back(pc);
+        if self.model.display_type() == DisplayType::Color || self.model.display_type() == DisplayType::Hd66789 {
+            static START: std::sync::OnceLock<std::time::Instant> = std::sync::OnceLock::new();
+            static mut LAST: u128 = 0;
+            let now = START.get_or_init(std::time::Instant::now).elapsed().as_millis();
+            if now - unsafe { LAST } >= 50 {
+                unsafe { LAST = now; }
+                if self.devices.r32(0x7000_8a20).expect("clcd") as u32 & (1 << 29) > 0 {
+                    if self.clcd_tx.is_set_high() {
+                        self.clcd_tx.set_low();
+                    } else {
+                        self.clcd_tx.set_high();
+                    }
+                }
+            }
+        }
 
         if self.frozen {
             return Ok(true);
@@ -689,7 +703,7 @@ impl System {
                     "MMIO",
                     MemExceptionCtx {
                         pc: cpu.reg_get(cpu.mode(), reg::PC),
-                        inst: devices.r32(pc).expect("inst"),
+                        inst: 0,
                         access,
                         in_device: format!("{}, {}", cpuid, devices.probe(access.offset)),
                     },
@@ -738,19 +752,14 @@ impl System {
             while let Some((engine, xfer)) = devices.poll_generic_dma() {
                 let mut src = xfer.src;
                 let mut dst = xfer.dst;
-                debug!(target: "DMA", "do DMA : src:{:x} dst:{:x} count:{:x} width:{:?}", src, dst, xfer.count, xfer.width);
-                // let _ = devices.w32(0x7000_8a0c, 0x8000_0012); // clcd => cmd = 0x12
-                // let _ = devices.w32(0x7000_8a0c, 0x8000_0000); // clcd => val = 0x00
+                // debug!(target: "DMA", "do DMA : src:{:x} dst:{:x} count:{:x} width:{:?}", src, dst, xfer.count, xfer.width);
+
                 for _ in 0..xfer.count {
                     use devices::DmaWidth;
                     let xfer_result = match xfer.width {
                         DmaWidth::Byte => devices.r8(src).and_then(|v| devices.w8(dst, v)),
                         DmaWidth::Half => devices.r16(src).and_then(|v| devices.w16(dst, v)),
-                        DmaWidth::Word => devices.r32(src).and_then(|v| {
-                            // if i < 0x50
-                            // {debug!(target: "DMA", "    v:{:x}", v);}
-                            devices.w32(dst, v)
-                        }),
+                        DmaWidth::Word => devices.r32(src).and_then(|v| devices.w32(dst, v)),
                     };
                     if xfer_result.is_err() {
                         break;

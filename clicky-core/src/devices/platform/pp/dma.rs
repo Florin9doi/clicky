@@ -2,7 +2,7 @@ use crate::devices::prelude::*;
 
 use std::time::{Duration, Instant};
 
-const CMD_SIZE_MASK: u32 = 0xffff;
+const CMD_SIZE_MASK: u32 = 0xfffc;
 const CMD_REQ_ID_SHIFT: u32 = 16;
 const CMD_REQ_ID_MASK: u32 = 0xf << CMD_REQ_ID_SHIFT;
 const CMD_WAIT_REQ: u32 = 1 << 24;
@@ -12,7 +12,7 @@ const CMD_SLEEP_WAIT: u32 = 1 << 28;
 const CMD_INTR: u32 = 1 << 30;
 const CMD_START: u32 = 1 << 31;
 
-const STATUS_SIZE_REMAIN_MASK: u32 = 0xffff;
+const STATUS_SIZE_REMAIN_MASK: u32 = 0xfffc;
 const STATUS_INTR: u32 = 1 << 30;
 const STATUS_BUSY: u32 = 1 << 31;
 
@@ -87,27 +87,27 @@ impl Dma {
             INCR_WIDTH_32BIT => DmaWidth::Word,
             _ => DmaWidth::Word,
         };
+
         let width_bytes = width.bytes();
         let count = (self.cmd & CMD_SIZE_MASK) + 4;
-
-        let per_step = match self.incr & INCR_RANGE_MASK {
-            INCR_RANGE_FIXED => 0,
-            INCR_RANGE_4 => 4,
-            INCR_RANGE_8 => 8,
-            INCR_RANGE_16 => 16,
-            INCR_RANGE_32 => 32,
-            INCR_RANGE_64 => 64,
-            _ => width_bytes,
-        };
+        let ram_to_per = self.cmd & CMD_RAM_TO_PER != 0;
 
         DmaXfer {
             channel,
             width,
             count,
-            src: if self.cmd & CMD_RAM_TO_PER != 0 {self.ram_addr} else {self.per_addr},
-            src_step: width_bytes,
-            dst: if self.cmd & CMD_RAM_TO_PER != 0 {self.per_addr} else {self.ram_addr},
-            dst_step: per_step,
+            src: if ram_to_per {
+                self.ram_addr
+            } else {
+                self.per_addr
+            },
+            src_step: if ram_to_per { width_bytes } else { 0 },
+            dst: if ram_to_per {
+                self.per_addr
+            } else {
+                self.ram_addr
+            },
+            dst_step: if ram_to_per { 0 } else { width_bytes },
             want_intr: self.cmd & CMD_INTR != 0,
         }
     }
@@ -207,17 +207,7 @@ impl DmaCon {
         if self.ready_mask == 0 {
             return None;
         }
-
-        // TODO: it's the hack time
-        // if self.last_run.elapsed() < Duration::from_millis(100) {
-        //     return None;
-        // }
-        // self.last_run = Instant::now();
-
         let channel = self.ready_mask.trailing_zeros() as usize;
-        if self.dma[channel].ram_addr == 0 || self.dma[channel].per_addr == 0 || self.dma[channel].cmd & CMD_SIZE_MASK == 0 {
-            return None;
-        }
         self.ready_mask &= !(1 << channel);
 
         Some(self.dma[channel].decode_xfer(channel))
@@ -225,13 +215,24 @@ impl DmaCon {
 
     pub fn complete(&mut self, channel: usize, want_intr: bool) {
         let dma = &mut self.dma[channel];
-        dma.cmd &= !CMD_START;
-        dma.status &= !STATUS_BUSY;
-        dma.status &= !STATUS_SIZE_REMAIN_MASK;
+        dma.status &= !(STATUS_BUSY | STATUS_SIZE_REMAIN_MASK);
+        dma.status |= STATUS_INTR;
 
         if want_intr {
-            dma.status |= STATUS_INTR;
+            self.update_irq();
+        }
+        self.req_status |= 1 << channel;
+    }
+
+    fn update_irq(&mut self) {
+        let pending = self.dma.iter().any(|dma| {
+            dma.status & STATUS_INTR != 0
+        });
+
+        if pending {
             self.irq.assert();
+        } else {
+            self.irq.clear();
         }
     }
 }
@@ -267,21 +268,27 @@ impl Memory for DmaCon {
             0x0 => Err(StubRead(Error, self.master_control)),
             0x4 => {
                 let mut status = 0;
-                for (i, dma) in self.dma.iter().enumerate().take(4) {
-                    if dma.status & STATUS_INTR != 0 {
+
+                for (i, dma) in self.dma.iter().enumerate() {
+                    if dma.status & STATUS_BUSY != 0 {
                         status |= 1 << (MASTER_STATUS_CH_SHIFT + i as u32);
                     }
                 }
+
                 Err(StubRead(Error, status))
             }
-            0x4 => Err(StubRead(Error, self.master_status)),
             0x8 => Err(StubRead(Error, self.req_status)),
             0x1000..=0x10ff => {
                 let id = (offset - 0x1000) / 0x20;
                 let dma = &mut self.dma[id as usize];
                 match offset % 0x20 {
                     0x00 => Err(StubRead(Error, dma.cmd)),
-                    0x04 => Err(StubRead(Error, dma.status)),
+                    0x04 => {
+                        let ret = dma.status;
+                        dma.status &= !STATUS_INTR;
+                        self.update_irq();
+                        Err(StubRead(Error, ret))
+                    }
                     0x10 => Err(StubRead(Error, dma.ram_addr)),
                     0x14 => Err(StubRead(Error, dma.flags)),
                     0x18 => Err(StubRead(Error, dma.per_addr)),
@@ -296,31 +303,28 @@ impl Memory for DmaCon {
     fn w32(&mut self, offset: u32, val: u32) -> MemResult<()> {
         match offset {
             0x0 => Err(StubWrite(Error, self.master_control = val)),
-            // 0x4 => Err(StubWrite(Error, self.master_status = val)),
             0x4 => Err(Unexpected),
-            0x8 => Err(StubWrite(Error, self.req_status = val)),
+            0x8 => Err(StubWrite(Error, self.req_status &= !val)),
             0x1000..=0x10ff => {
                 let id = (offset - 0x1000) / 0x20;
                 let channel = id as usize;
                 let dma = &mut self.dma[channel];
                 match offset % 0x20 {
                     0x00 => {
+                        let previous_cmd = dma.cmd;
                         dma.cmd = val;
-                        if val & CMD_WAIT_REQ != 0 {
-                        // if val & CMD_START != 0 {
-                            if dma.status & STATUS_BUSY != 0 {
-                                // already running
-                            } else {
+                        let start_edge = val & CMD_START != 0 && previous_cmd & CMD_START == 0;
+                        if start_edge {
+                            dma.status &= !STATUS_INTR;
+                            if dma.status & STATUS_BUSY == 0 {
                                 dma.status |= STATUS_BUSY;
-                                dma.status &= !STATUS_INTR;
                                 self.ready_mask |= 1 << channel;
                             }
                         }
+
                         Ok(())
                     }
                     0x04 => {
-                        // dma.status &= !val;
-                        // Ok(())
                         Err(Unexpected)
                     }
                     0x10 => Err(StubWrite(Error, dma.ram_addr = val)),
