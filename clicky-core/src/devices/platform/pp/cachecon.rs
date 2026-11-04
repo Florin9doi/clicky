@@ -49,9 +49,11 @@ impl Memory for CacheCon {
                 Err(StubRead(Warn, val))
             }
             0x04 => Err(StubRead(Warn, 0)), // pp5002 cache
-            0x08 => Err(StubRead(Warn, 0)), // pp5002 cache
+            0x08 => Err(StubRead(Warn, 0)), // 4g photo -> photo slideshow -> tv out
             0x0c => Err(StubRead(Warn, 0)), // pp5002 cache
-            0x10 => Err(InvalidAccess),
+            0x10 => Err(StubRead(Warn, 0)), // 4g photo -> photo slideshow -> tv out
+            0x14 => Err(StubRead(Warn, 0)), // 4g photo -> photo slideshow -> tv out
+            0x1c => Err(StubRead(Warn, 0)), // 4g photo -> photo slideshow -> tv out
             0x34 => Err(InvalidAccess),
             _ => Err(Unexpected),
         }
@@ -65,8 +67,11 @@ impl Memory for CacheCon {
                 Err(StubWrite(Error, ()))
             }
             0x04 => Err(StubWrite(Error, ())), // pp5002 cache
+            0x08 => Err(StubWrite(Error, ())), // 4g photo -> photo slideshow -> tv out
             0x0c => Err(StubWrite(Error, ())), // pp5002 cache
             0x10 => Err(StubWrite(Error, ())),
+            0x14 => Err(StubWrite(Error, ())), // 4g photo -> photo slideshow -> tv out
+            0x1c => Err(StubWrite(Error, ())), // 4g photo -> photo slideshow -> tv out
             0x34 => Err(StubWrite(Error, ())),
             _ => Err(Unexpected),
         }

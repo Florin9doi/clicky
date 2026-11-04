@@ -372,6 +372,7 @@ mmap! {
         // Diagnostics program reads from address, and write back 0x10000000
         0x7000_3800..=0x7000_382f => tvout,
         0x7000_8b00..=0x7000_8bff => total_mystery, // ipod color diag mode
+        0x7472_6f84 => total_mystery, // ipod color -> photo slideshow
         0xc031_b1d8 => mystery_flash_stub,
         0xc031_b1e8 => mystery_flash_stub,
         0xc500_0000..=0xc500_01ff => usb,

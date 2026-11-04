@@ -79,6 +79,7 @@ impl Memory for PPCon {
             0x30 => Err(StubRead(Info, self.dev_timing[0] | 0x8000000)),
             0x34 => Err(StubRead(Debug, self.dev_timing[1])),
             0x3c => Err(StubRead(Info, self.dev_timing[2])),
+            0x44 => Err(StubRead(Info, 0)), // 4gphoto -> photo slideshow -> tvout
             0x80 => Ok(self.gpo_val),
             0x84 => Ok(self.gpo_enable),
             0x88 => Err(StubRead(Info, 0x00)),
@@ -108,6 +109,7 @@ impl Memory for PPCon {
             // HACK: flag needs to be set to progress through the Flash ROM bootloader
             0x3c => Err(StubWrite(Info, self.dev_timing[2] = val | 0x80000000)),
             0x40 => Err(StubWrite(Trace, ())),
+            0x44 => Err(StubWrite(Info, ())), // 4gphoto -> photo slideshow -> tvout
             0x80 => Ok(self.gpo_val = val),
             0x84 => Ok(self.gpo_enable = val),
             0x88 => Err(StubWrite(Trace, ())),

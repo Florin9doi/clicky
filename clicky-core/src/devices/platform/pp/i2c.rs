@@ -86,11 +86,11 @@ impl I2CTransaction {
 impl I2CTransactionCfg {
     fn take_txn(&mut self) -> MemResult<I2CTransaction> {
         // sanity check
-        if self.addr_op != self.op {
-            return Err(Fatal(
-                "mismatch between op type in control (bit 5) and addr (bit 0)".into(),
-            ));
-        }
+        // if self.addr_op != self.op {
+        //     return Err(Fatal(
+        //         "mismatch between op type in control (bit 5) and addr (bit 0)".into(),
+        //     ));
+        // }
 
         let res = I2CTransaction {
             op: (self.op).ok_or_else(|| Fatal("did not specify op".into()))?,
@@ -98,11 +98,11 @@ impl I2CTransactionCfg {
             len: (self.len).ok_or_else(|| Fatal("did not specify len".into()))?,
             slave2: match self.slv2 {
                 true => {
-                    if self.addr1_op != self.op1 {
-                        return Err(Fatal(
-                            "mismatch between op type in control (bit 6) and addr1 (bit 0)".into(),
-                        ));
-                    }
+                    // if self.addr1_op != self.op1 {
+                    //     return Err(Fatal(
+                    //         "mismatch between op type in control (bit 6) and addr1 (bit 0)".into(),
+                    //     ));
+                    // }
                     Some((
                         (self.op1).ok_or_else(|| Fatal("did not specify slave 2 op".into()))?,
                         (self.addr1).ok_or_else(|| Fatal("did not specify addr1".into()))?,
