@@ -32,6 +32,7 @@ mod devcon_device;
 mod ppver_5002;
 mod scroll;
 mod tsb43aa82;
+mod tv_out;
 mod unk_5002_4000;
 mod usb_5002;
 
@@ -67,6 +68,7 @@ pub use devcon_device::*;
 pub use ppver_5002::*;
 pub use scroll::*;
 pub use tsb43aa82::*;
+pub use tv_out::*;
 pub use unk_5002_4000::*;
 pub use usb_5002::*;
 

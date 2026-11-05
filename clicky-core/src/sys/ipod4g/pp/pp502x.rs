@@ -39,6 +39,7 @@ pub struct PP502xBus {
     pub debug_button_irq: irq::Sender,
     pub mystery_flash_stub: devices::Stub,
     pub pwmcon: devices::PWMCon,
+    pub tvout: devices::TvOut,
     pub bcm_video: devices::Bcm2722,
 
     pub pp5002_serial_stub: devices::Stub,
@@ -173,6 +174,7 @@ impl PP502xBus {
             usb: Usb::new(),
 
             mystery_flash_stub: Stub::new("Mystery FlashROM Con?"),
+            tvout: TvOut::new(),
             bcm_video: Bcm2722::new(model.make_panel()),
             pp5002_serial_stub: Stub::new("PP5002 serial stub"),
         }
@@ -368,7 +370,7 @@ mmap! {
         0x7000_2c00 => total_mystery,
         0x7000_c300..=0x7000_c3ff => total_mystery, // triggered by 5g with nor but no hdd
         // Diagnostics program reads from address, and write back 0x10000000
-        0x7000_3800 => total_mystery,
+        0x7000_3800..=0x7000_382f => tvout,
         0x7000_8b00..=0x7000_8bff => total_mystery, // ipod color diag mode
         0xc031_b1d8 => mystery_flash_stub,
         0xc031_b1e8 => mystery_flash_stub,
