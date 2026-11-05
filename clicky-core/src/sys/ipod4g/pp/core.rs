@@ -64,6 +64,8 @@ impl PpCore {
 
         let mut i2ccon = devices::I2CCon::new(i2c_irq_tx.clone());
         i2ccon.register_device(0x08, Box::new(devices::i2c::Pcf5060x::new()));
+        i2ccon.register_device(0x1a, Box::new(devices::i2c::Wm87xx::new()));
+        i2ccon.register_device(0x2a, Box::new(devices::i2c::Adv7174::new()));
 
         use devices::*;
         let core = PpCore {

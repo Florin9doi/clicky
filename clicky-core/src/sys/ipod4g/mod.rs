@@ -29,7 +29,9 @@ use crate::devices::platform::pp::FlashChip;
 use crate::devices::util::{ArcMutexDevice, MemSniffer};
 mod devices {
     pub mod i2c {
+        pub use crate::devices::i2c::devices::Adv7174;
         pub use crate::devices::i2c::devices::Pcf5060x;
+        pub use crate::devices::i2c::devices::Wm87xx;
     }
 
     pub use crate::devices::{
