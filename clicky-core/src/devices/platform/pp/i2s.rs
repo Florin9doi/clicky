@@ -39,6 +39,20 @@ impl Device for I2SCon {
 }
 
 impl Memory for I2SCon {
+    fn r16(&mut self, offset: u32) -> MemResult<u16> {
+        match offset {
+            0x22 => Err(StubRead(Error, 0)),
+            _ => Err(Unexpected),
+        }
+    }
+
+    fn w16(&mut self, offset: u32, val: u16) -> MemResult<()> {
+        match offset {
+            0x22 => Err(StubWrite(Error, ())),
+            _ => Err(Unexpected),
+        }
+    }
+
     fn r32(&mut self, offset: u32) -> MemResult<u32> {
         match offset {
             0x00 => Err(StubRead(Error, self.config)),

@@ -78,7 +78,7 @@ impl Memory for MonoLcdBridge {
     fn w32(&mut self, offset: u32, val: u32) -> MemResult<()> {
         if offset == 0x0 {
             // bypass the latch
-            return Err(StubWrite(Error, ()));
+            return Err(StubWrite(Trace, ()));
         }
 
         // mini2g/pp5022 change/quirk

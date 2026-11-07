@@ -71,7 +71,7 @@ impl Memory for Serial {
                    .set_bit(6, true); // THRE / Transmit Holding Register Empty (1 = empty)
                 val as u32
             }),
-            0x18..0x28 => Err(Unimplemented),
+            0x18..=0x30 => Err(StubRead(Warn, 0)), // 3g diag
             0x3c => Ok(self.asr as u32),
             _ => Err(Unexpected),
         }
@@ -94,7 +94,7 @@ impl Memory for Serial {
             0x0c => Ok(self.lcr = val),
             0x10 => Ok(self.mcr = val),
             0x14 => Err(InvalidAccess),
-            0x18..0x28 => Err(Unimplemented),
+            0x18..=0x30 => Err(StubWrite(Warn, ())), // 3g diag
             0x3c => Ok(self.asr = val),
             _ => Err(Unexpected),
         }
